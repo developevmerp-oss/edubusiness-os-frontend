@@ -51,7 +51,8 @@ export async function apiRequest(path: string, options: RequestInit = {}) {
         }
     }
 
-    const response = await fetch(`${BACKEND_URL}${path}`, {
+        const url = `${BACKEND_URL.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
+    const response = await fetch(url, {
         ...options,
         headers,
         credentials: 'include'
@@ -70,4 +71,5 @@ export async function apiRequest(path: string, options: RequestInit = {}) {
 
     return response.json();
 }
+
 
