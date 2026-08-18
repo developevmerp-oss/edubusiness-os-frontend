@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -61,6 +61,7 @@ export default function LoginPage() {
             // Store user profile details in localStorage for dynamic layout use
             localStorage.setItem('user_profile', JSON.stringify(data.user));
             localStorage.setItem('tenant_info', JSON.stringify(data.tenant));
+            localStorage.setItem('tenant_subdomain', data.tenant.subdomain);
             
             setSuccess('Login successful! Redirecting...');
             setTimeout(() => {
@@ -146,45 +147,12 @@ export default function LoginPage() {
                         letterSpacing: '0.15em',
                         color: 'var(--primary)'
                     }}>
-                        {isRegisteringTenant ? 'GET STARTED' : `WORKSPACE: ${subdomain.toUpperCase()}`}
+                        {isRegisteringTenant ? 'GET STARTED' : 'WELCOME BACK'}
                     </span>
                     <h2 className="gradient-text" style={{ fontSize: '2rem', marginTop: '6px', fontWeight: '800' }}>
                         {isRegisteringTenant ? 'Register Academy' : 'Sign In'}
                     </h2>
                 </div>
-
-                {/* Subdomain context switcher (Local dev helpers) */}
-                {!isRegisteringTenant && (
-                    <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        background: 'rgba(255, 255, 255, 0.02)',
-                        border: '1px dashed var(--border-glass)',
-                        borderRadius: '10px',
-                        padding: '10px 16px',
-                        marginBottom: '24px'
-                    }}>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Subdomain:</span>
-                        <select 
-                            value={subdomain} 
-                            onChange={(e) => handleSubdomainChange(e.target.value)}
-                            style={{
-                                background: '#12131a',
-                                color: 'var(--text-primary)',
-                                border: '1px solid var(--border-glass)',
-                                borderRadius: '6px',
-                                padding: '4px 8px',
-                                fontSize: '0.85rem',
-                                outline: 'none'
-                            }}
-                        >
-                            <option value="abc">abc (Demo Academy)</option>
-                            <option value="def">def (Unregistered demo)</option>
-                            {/* Dynamically reads newly created ones from local storage helper */}
-                        </select>
-                    </div>
-                )}
 
                 {error && (
                     <div style={{
@@ -196,7 +164,7 @@ export default function LoginPage() {
                         fontSize: '0.9rem',
                         marginBottom: '20px'
                     }}>
-                        ⚠️ {error}
+                        âš ï¸ {error}
                     </div>
                 )}
 
@@ -210,7 +178,7 @@ export default function LoginPage() {
                         fontSize: '0.9rem',
                         marginBottom: '20px'
                     }}>
-                        ✓ {success}
+                        âœ“ {success}
                     </div>
                 )}
 
@@ -338,7 +306,7 @@ export default function LoginPage() {
                                 <input 
                                     type={showPassword ? "text" : "password"} 
                                     className="glass-input" 
-                                    placeholder="••••••••"
+                                    placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                                     required 
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
@@ -401,3 +369,5 @@ export default function LoginPage() {
         </div>
     );
 }
+
+
