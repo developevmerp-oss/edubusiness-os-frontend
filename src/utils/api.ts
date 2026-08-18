@@ -2,17 +2,27 @@
 export function getSubdomain(): string {
     if (typeof window === 'undefined') return 'abc';
     
+    // 1. Prioritize localStorage override (essential for single-domain production deployments like Vercel)
+    const localOverride = localStorage.getItem('tenant_subdomain');
+    if (localOverride) {
+        return localOverride;
+    }
+    
     const host = window.location.host;
     const parts = host.split('.');
     
-    // e.g. "abc.localhost:3000" or "abc.edubusiness.com"
+    // 2. Fall back to URL-based subdomain if it is not the main platform domain
     if (parts.length > 1 && parts[0] !== 'www' && parts[0] !== 'localhost') {
-        return parts[0];
+        const isMainDomain = parts[0] === 'edubusiness-os-frontend' || 
+                             parts[0] === 'edubusiness-os-backend' || 
+                             host.includes('vercel.app') && parts.length === 3 && parts[0].includes('frontend');
+                             
+        if (!isMainDomain) {
+            return parts[0];
+        }
     }
     
-    // In local dev, allow override via localStorage for testing different subdomains easily on localhost:3000
-    const localOverride = localStorage.getItem('tenant_subdomain');
-    return localOverride || 'abc';
+    return 'abc';
 }
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
@@ -71,5 +81,6 @@ export async function apiRequest(path: string, options: RequestInit = {}) {
 
     return response.json();
 }
+
 
 
