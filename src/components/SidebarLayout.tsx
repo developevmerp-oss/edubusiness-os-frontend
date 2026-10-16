@@ -15,7 +15,9 @@ import {
     CreditCard,
     MessageSquare,
     Trophy,
-    Mail
+    Mail,
+    HelpCircle,
+    ClipboardList
 } from 'lucide-react';
 import { apiRequest } from '../utils/api';
 
@@ -85,6 +87,8 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
         { name: 'Batches', path: '/batches', icon: Calendar, roles: ['admin', 'teacher', 'student', 'parent'] },
         { name: 'Users', path: '/users', icon: Users, roles: ['admin'] },
         { name: 'Exams', path: '/exams', icon: FileText, roles: ['admin', 'teacher', 'student', 'parent'] },
+        { name: 'Assignments', path: '/assignments', icon: ClipboardList, roles: ['admin', 'teacher', 'student'] },
+        { name: 'Doubts Desk', path: '/doubts', icon: HelpCircle, roles: ['admin', 'teacher', 'student'] },
         { name: 'Storefront', path: '/store', icon: ShoppingBag, roles: ['admin', 'teacher', 'student', 'parent'] },
         { name: 'Receipts', path: '/store/purchases', icon: CreditCard, roles: ['student'] },
         { name: 'Community', path: '/community', icon: MessageSquare, roles: ['admin', 'teacher', 'student', 'parent'] },

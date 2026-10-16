@@ -28,6 +28,7 @@ export default function DashboardPage() {
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'upi' | 'bank_transfer'>('upi');
     const [txnRef, setTxnRef] = useState('');
     const [feesList, setFeesList] = useState<any[]>([]);
+    const [installmentsList, setInstallmentsList] = useState<any[]>([]);
     const [riskList, setRiskList] = useState<any[]>([]);
 
     // Teacher marking attendance state
@@ -58,6 +59,12 @@ export default function DashboardPage() {
                 const riskData = await apiRequest('/api/ai/risk/analysis');
                 setRiskList(riskData.riskAnalysis);
             }
+
+            // Fetch Fee Installments Schedule
+            try {
+                const instData = await apiRequest('/api/fees/installments');
+                setInstallmentsList(instData.installments || []);
+            } catch (e) {}
         } catch (err: any) {
             setError(err.message || 'Failed to load metrics.');
         } finally {
@@ -85,6 +92,18 @@ export default function DashboardPage() {
             fetchDashboardData(); // Refresh metrics
         } catch (err: any) {
             alert(err.message || 'Payment submission failed.');
+        }
+    };
+
+    // Pay Fee Installment
+    const handlePayInstallment = async (installmentId: string) => {
+        if (!confirm('Proceed to record payment for this fee installment?')) return;
+        try {
+            await apiRequest(`/api/fees/installments/${installmentId}/pay`, { method: 'POST' });
+            alert('Fee installment payment confirmed successfully!');
+            fetchDashboardData();
+        } catch (err: any) {
+            alert(err.message || 'Payment processing failed.');
         }
     };
 
@@ -600,6 +619,69 @@ export default function DashboardPage() {
                                 )}
                             </div>
                         </div>
+
+                        {/* Fee Installment Schedules Table */}
+                        {installmentsList.length > 0 && (
+                            <div className="glass-panel" style={{ padding: '30px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                    <div>
+                                        <h3 style={{ fontSize: '1.2rem', fontWeight: '700' }}>Fee Installment Schedule</h3>
+                                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Scheduled fee payments for your enrolled courses</span>
+                                    </div>
+                                </div>
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table className="glass-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Installment</th>
+                                                <th>Course</th>
+                                                <th>Amount</th>
+                                                <th>Due Date</th>
+                                                <th>Status</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {installmentsList.map((inst: any) => (
+                                                <tr key={inst.id}>
+                                                    <td><strong>Installment #{inst.installment_number}</strong></td>
+                                                    <td>{inst.course_title || 'Enrolled Course'}</td>
+                                                    <td>₹{parseFloat(inst.amount).toLocaleString()}</td>
+                                                    <td>{new Date(inst.due_date).toLocaleDateString()}</td>
+                                                    <td>
+                                                        <span style={{
+                                                            padding: '4px 8px',
+                                                            borderRadius: '6px',
+                                                            fontSize: '0.75rem',
+                                                            fontWeight: '600',
+                                                            background: inst.status === 'paid' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                                            color: inst.status === 'paid' ? '#34d399' : '#fbbf24'
+                                                        }}>
+                                                            {inst.status.toUpperCase()}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        {inst.status !== 'paid' ? (
+                                                            <button 
+                                                                onClick={() => handlePayInstallment(inst.id)}
+                                                                className="btn-primary"
+                                                                style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                                                            >
+                                                                Pay Now
+                                                            </button>
+                                                        ) : (
+                                                            <span style={{ color: '#10b981', fontSize: '0.8rem', fontWeight: '600' }}>
+                                                                ✓ Paid on {new Date(inst.paid_at || inst.created_at).toLocaleDateString()}
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </>
                 )}
 
