@@ -429,7 +429,7 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
                                             ))}
                                         </div>
 
-                                        {/* 2. Primary Bouncing Dynamic Watermark (Classplus Standard) */}
+                                        {/* 2. Primary Bouncing Dynamic Watermark (Anti-Piracy DRM) */}
                                         <div style={{
                                             position: 'absolute',
                                             top: watermarkPos.top,

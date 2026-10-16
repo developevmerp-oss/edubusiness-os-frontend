@@ -80,7 +80,7 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
     const handleCheckout = async () => {
         setIsProcessing(true);
         try {
-            // 1. Create Checkout Order (including Tagmango order bump if selected)
+            // 1. Create Checkout Order (including order bump if selected)
             const checkoutData = await apiRequest('/api/store/checkout', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -126,7 +126,7 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
         );
     }
 
-    // Dynamic calculations including Tagmango order bump
+    // Dynamic calculations including 1-click order bump
     const baseCoursePrice = parseFloat(course.price);
     const bumpFee = includeOrderBump ? ORDER_BUMP_PRICE : 0.00;
     const basePrice = baseCoursePrice + bumpFee;
@@ -275,7 +275,7 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
                             </div>
                         )}
 
-                        {/* Tagmango 1-Click Order Bump Card */}
+                        {/* 1-Click Order Bump Card */}
                         <div 
                             style={{
                                 background: includeOrderBump ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.02)',
