@@ -15,7 +15,8 @@ import {
     X,
     FileText,
     Video,
-    Award
+    Award,
+    ShieldCheck
 } from 'lucide-react';
 
 interface StoreCourseDetailPageProps {
@@ -39,11 +40,37 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
     const [isProcessing, setIsProcessing] = useState(false);
     const [includeOrderBump, setIncludeOrderBump] = useState(false);
     const [referralCode, setReferralCode] = useState('');
+    const [gatewayConfig, setGatewayConfig] = useState<{
+        activeGateway: 'sandbox' | 'razorpay' | 'stripe';
+        isTestMode: boolean;
+        razorpayKeyId: string;
+        stripePublishableKey: string;
+    }>({
+        activeGateway: 'sandbox',
+        isTestMode: true,
+        razorpayKeyId: '',
+        stripePublishableKey: ''
+    });
 
     const ORDER_BUMP_PRICE = 199.00;
 
     useEffect(() => {
         fetchCourseAndSyllabus();
+        
+        // Fetch public payment gateway configuration
+        apiRequest('/api/settings/payment-gateway/public')
+            .then((data) => {
+                if (data) {
+                    setGatewayConfig({
+                        activeGateway: data.activeGateway || 'sandbox',
+                        isTestMode: data.isTestMode ?? true,
+                        razorpayKeyId: data.razorpayKeyId || '',
+                        stripePublishableKey: data.stripePublishableKey || ''
+                    });
+                }
+            })
+            .catch(() => {});
+
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
             const ref = params.get('ref') || localStorage.getItem('affiliate_ref');
@@ -53,6 +80,19 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
             }
         }
     }, [courseId]);
+
+    const loadRazorpayScript = () => {
+        return new Promise<boolean>((resolve) => {
+            if (typeof window === 'undefined') return resolve(false);
+            if ((window as any).Razorpay) return resolve(true);
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.async = true;
+            script.onload = () => resolve(true);
+            script.onerror = () => resolve(false);
+            document.body.appendChild(script);
+        });
+    };
 
     const fetchCourseAndSyllabus = async () => {
         setLoading(true);
@@ -113,21 +153,94 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
     const handleCheckout = async () => {
         setIsProcessing(true);
         try {
-            // 1. Create Checkout Order (including order bump and referral code if present)
+            // 1. Create Checkout Order
             const checkoutData = await apiRequest('/api/store/checkout', {
                 method: 'POST',
                 body: JSON.stringify({
                     courseId,
                     couponCode: appliedCoupon ? appliedCoupon.code : undefined,
-                    gateway: 'sandbox',
+                    gateway: gatewayConfig.activeGateway || 'sandbox',
                     orderBump: includeOrderBump,
                     referralCode: referralCode || undefined
                 })
             });
 
             const orderId = checkoutData.order.id;
+            const gw = checkoutData.gatewayConfig || gatewayConfig;
 
-            // 2. Automatically Verify Sandbox Payment & Attribute Referral
+            // 2. Razorpay Live / Test modal flow
+            if (gw.activeGateway === 'razorpay') {
+                const loaded = await loadRazorpayScript();
+                if (!loaded) {
+                    throw new Error('Unable to load Razorpay checkout SDK. Please verify your internet connection.');
+                }
+
+                let prefill = { name: '', email: '', contact: '' };
+                try {
+                    const storedUser = localStorage.getItem('user');
+                    if (storedUser) {
+                        const u = JSON.parse(storedUser);
+                        prefill = {
+                            name: `${u.first_name || ''} ${u.last_name || ''}`.trim(),
+                            email: u.email || '',
+                            contact: u.phone || ''
+                        };
+                    }
+                } catch (e) {}
+
+                const options: any = {
+                    key: gw.razorpayKeyId || 'rzp_test_public_key',
+                    amount: gw.amountInPaise || Math.round(finalAmount * 100),
+                    currency: gw.currency || 'INR',
+                    name: 'EduBusiness OS',
+                    description: `Enrollment: ${course?.title || 'Course'}`,
+                    order_id: gw.razorpayOrderId,
+                    prefill,
+                    theme: {
+                        color: '#6366f1'
+                    },
+                    modal: {
+                        ondismiss: () => {
+                            setIsProcessing(false);
+                        }
+                    },
+                    handler: async (response: any) => {
+                        try {
+                            setIsProcessing(true);
+                            await apiRequest(`/api/store/checkout/${orderId}/verify-gateway`, {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                    razorpayPaymentId: response.razorpay_payment_id,
+                                    razorpayOrderId: response.razorpay_order_id,
+                                    razorpaySignature: response.razorpay_signature,
+                                    referralCode: referralCode || undefined
+                                })
+                            });
+
+                            const successMsg = includeOrderBump 
+                                ? 'Payment successful! Course syllabus and VIP Handwritten Formula Booklet have been added to your dashboard.' 
+                                : 'Payment successful! You now have full access to the course syllabus.';
+                            alert(successMsg);
+                            setIsCheckoutOpen(false);
+                            router.push(`/courses/${courseId}`);
+                        } catch (verifyErr: any) {
+                            alert(verifyErr.message || 'Payment verification failed.');
+                        } finally {
+                            setIsProcessing(false);
+                        }
+                    }
+                };
+
+                const rzp = new (window as any).Razorpay(options);
+                rzp.on('payment.failed', (resp: any) => {
+                    alert(`Payment Failed: ${resp.error?.description || 'Transaction declined.'}`);
+                    setIsProcessing(false);
+                });
+                rzp.open();
+                return;
+            }
+
+            // 3. Sandbox Instant Verification
             await apiRequest(`/api/store/checkout/${orderId}/verify`, {
                 method: 'POST',
                 body: JSON.stringify({
@@ -139,6 +252,7 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
                 ? 'Enrollment complete! Course syllabus and VIP Handwritten Formula Booklet have been added to your dashboard.' 
                 : 'Enrollment complete! You now have full access to the course syllabus.';
             alert(successMsg);
+            setIsCheckoutOpen(false);
             router.push(`/courses/${courseId}`);
         } catch (err: any) {
             alert(err.message || 'Checkout transaction failed.');
@@ -395,13 +509,38 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
                             </div>
                         </div>
 
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            fontSize: '0.78rem',
+                            color: 'var(--text-muted)',
+                            marginTop: '-6px'
+                        }}>
+                            <ShieldCheck size={14} style={{ color: '#10b981' }} />
+                            <span>
+                                {gatewayConfig.activeGateway === 'razorpay'
+                                    ? (gatewayConfig.isTestMode ? 'Razorpay Test Mode Active (256-bit SSL)' : 'Razorpay Live Payments (256-bit SSL)')
+                                    : gatewayConfig.activeGateway === 'stripe'
+                                    ? 'Stripe Global Card Payments (PCI-DSS Level 1)'
+                                    : 'Instant Sandbox Simulator Mode'}
+                            </span>
+                        </div>
+
                         <button 
                             onClick={handleCheckout} 
                             className="btn-primary" 
-                            style={{ width: '100%', padding: '12px' }}
+                            style={{ width: '100%', padding: '12px', fontWeight: '700' }}
                             disabled={isProcessing}
                         >
-                            {isProcessing ? 'Verifying payment...' : 'Pay Sandbox'}
+                            {isProcessing 
+                                ? 'Processing Payment...' 
+                                : gatewayConfig.activeGateway === 'razorpay'
+                                ? `Pay ₹${Math.round(finalAmount).toLocaleString()} via Razorpay`
+                                : gatewayConfig.activeGateway === 'stripe'
+                                ? `Pay ₹${Math.round(finalAmount).toLocaleString()} via Stripe`
+                                : `Pay ₹${Math.round(finalAmount).toLocaleString()} (Instant Activation)`}
                         </button>
                     </div>
                 </ModalPortal>

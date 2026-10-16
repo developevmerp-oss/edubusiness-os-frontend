@@ -6,11 +6,12 @@ import ModalPortal from '../../components/ModalPortal';
 import { apiRequest } from '../../utils/api';
 import { 
     Settings, ShieldCheck, Paintbrush, Save, Smartphone, 
-    Download, CheckCircle, Code, Layers, Sparkles, ExternalLink
+    Download, CheckCircle, Code, Layers, Sparkles, ExternalLink,
+    CreditCard, Key, Copy, Check, RefreshCw, AlertTriangle, Globe
 } from 'lucide-react';
 
 export default function SettingsBrandingPage() {
-    const [activeTab, setActiveTab] = useState<'branding' | 'mobile'>('branding');
+    const [activeTab, setActiveTab] = useState<'branding' | 'mobile' | 'payment'>('branding');
     const [userRole, setUserRole] = useState('');
     const [tenant, setTenant] = useState<any>(null);
     const [name, setName] = useState('');
@@ -20,6 +21,21 @@ export default function SettingsBrandingPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [successMsg, setSuccessMsg] = useState('');
+
+    // Payment Gateway State
+    const [activeGateway, setActiveGateway] = useState<'sandbox' | 'razorpay' | 'stripe'>('sandbox');
+    const [isTestMode, setIsTestMode] = useState(true);
+    const [razorpayKeyId, setRazorpayKeyId] = useState('');
+    const [razorpayKeySecret, setRazorpayKeySecret] = useState('');
+    const [razorpayWebhookSecret, setRazorpayWebhookSecret] = useState('');
+    const [stripePublishableKey, setStripePublishableKey] = useState('');
+    const [stripeSecretKey, setStripeSecretKey] = useState('');
+    const [stripeWebhookSecret, setStripeWebhookSecret] = useState('');
+    const [webhookUrl, setWebhookUrl] = useState('https://edubusiness-os-backend.onrender.com/api/store/webhooks/razorpay');
+    const [copiedWebhook, setCopiedWebhook] = useState(false);
+    const [testingConnection, setTestingConnection] = useState(false);
+    const [testResult, setTestResult] = useState<{ status: string; message: string } | null>(null);
+    const [savingGateway, setSavingGateway] = useState(false);
 
     // Mobile App Builder State
     const [appName, setAppName] = useState('Apex Academy Pro');
@@ -55,7 +71,69 @@ export default function SettingsBrandingPage() {
             }
         }
         fetchMobileConfig();
+        fetchPaymentGatewayConfig();
     }, []);
+
+    const fetchPaymentGatewayConfig = async () => {
+        try {
+            const res = await apiRequest('/api/settings/payment-gateway');
+            if (res.config) {
+                setActiveGateway(res.config.activeGateway || 'sandbox');
+                setIsTestMode(res.config.isTestMode ?? true);
+                setRazorpayKeyId(res.config.razorpayKeyId || '');
+                setRazorpayKeySecret(res.config.razorpayKeySecretMasked || '');
+                setRazorpayWebhookSecret(res.config.razorpayWebhookSecretMasked || '');
+                setStripePublishableKey(res.config.stripePublishableKey || '');
+                setStripeSecretKey(res.config.stripeSecretKeyMasked || '');
+                setStripeWebhookSecret(res.config.stripeWebhookSecretMasked || '');
+                setWebhookUrl(res.config.webhookUrl || 'https://edubusiness-os-backend.onrender.com/api/store/webhooks/razorpay');
+            }
+        } catch (e) {
+            console.error('Failed to load gateway config:', e);
+        }
+    };
+
+    const handleSaveGateway = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSavingGateway(true);
+        setTestResult(null);
+        try {
+            const res = await apiRequest('/api/settings/payment-gateway', {
+                method: 'POST',
+                body: JSON.stringify({
+                    activeGateway,
+                    isTestMode,
+                    razorpayKeyId,
+                    razorpayKeySecret,
+                    razorpayWebhookSecret,
+                    stripePublishableKey,
+                    stripeSecretKey,
+                    stripeWebhookSecret
+                })
+            });
+            setSuccessMsg(res.message || 'Payment gateway configuration updated!');
+            setTimeout(() => setSuccessMsg(''), 4000);
+        } catch (err: any) {
+            alert(err.message || 'Failed to save payment gateway settings.');
+        } finally {
+            setSavingGateway(false);
+        }
+    };
+
+    const handleTestConnection = async () => {
+        setTestingConnection(true);
+        setTestResult(null);
+        try {
+            const res = await apiRequest('/api/settings/payment-gateway/test-connection', {
+                method: 'POST'
+            });
+            setTestResult({ status: 'success', message: res.message || 'Connection verified successfully!' });
+        } catch (err: any) {
+            setTestResult({ status: 'error', message: err.message || 'Gateway connection failed.' });
+        } finally {
+            setTestingConnection(false);
+        }
+    };
 
     const fetchMobileConfig = async () => {
         try {
@@ -272,6 +350,25 @@ export default function SettingsBrandingPage() {
                         }}
                     >
                         <Smartphone size={16} /> Native Android & PWA Builder
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('payment')}
+                        style={{
+                            padding: '10px 18px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            fontSize: '0.88rem',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            background: activeTab === 'payment' ? 'var(--primary)' : 'transparent',
+                            color: activeTab === 'payment' ? '#fff' : 'var(--text-muted)',
+                            transition: 'all 0.2s ease'
+                        }}
+                    >
+                        <CreditCard size={16} /> Payment Gateways & Webhooks
                     </button>
                 </div>
 
@@ -614,6 +711,351 @@ export default function SettingsBrandingPage() {
                             </span>
                         </div>
 
+                    </div>
+                )}
+
+                {/* ========================================================
+                    TAB 3: PAYMENT GATEWAYS & LIVE WEBHOOKS
+                   ======================================================== */}
+                {activeTab === 'payment' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', maxWidth: '840px' }}>
+                        
+                        {/* Gateway Selector Cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
+                            {/* Card 1: Sandbox Simulator */}
+                            <div 
+                                onClick={() => setActiveGateway('sandbox')}
+                                className="glass-panel"
+                                style={{
+                                    padding: '24px',
+                                    borderRadius: '16px',
+                                    cursor: 'pointer',
+                                    border: '2px solid',
+                                    borderColor: activeGateway === 'sandbox' ? '#6366f1' : 'var(--border-glass)',
+                                    background: activeGateway === 'sandbox' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(15, 23, 42, 0.4)',
+                                    transition: 'all 0.2s ease',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between'
+                                }}
+                            >
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                        <div style={{ padding: '8px', borderRadius: '10px', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8' }}>
+                                            <CreditCard size={22} />
+                                        </div>
+                                        {activeGateway === 'sandbox' && (
+                                            <span style={{ fontSize: '0.72rem', background: '#6366f1', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontWeight: '700' }}>
+                                                ACTIVE
+                                            </span>
+                                        )}
+                                    </div>
+                                    <h4 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '6px' }}>Sandbox Simulator</h4>
+                                    <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                                        Instant local & staging simulation. Free, zero-setup testing for students with automated GST invoicing.
+                                    </p>
+                                </div>
+                                <div style={{ marginTop: '16px', fontSize: '0.78rem', color: '#34d399', fontWeight: '600' }}>
+                                    ✓ 100% Operational (Ready)
+                                </div>
+                            </div>
+
+                            {/* Card 2: Razorpay (India & UPI) */}
+                            <div 
+                                onClick={() => setActiveGateway('razorpay')}
+                                className="glass-panel"
+                                style={{
+                                    padding: '24px',
+                                    borderRadius: '16px',
+                                    cursor: 'pointer',
+                                    border: '2px solid',
+                                    borderColor: activeGateway === 'razorpay' ? '#0ea5e9' : 'var(--border-glass)',
+                                    background: activeGateway === 'razorpay' ? 'rgba(14, 165, 233, 0.1)' : 'rgba(15, 23, 42, 0.4)',
+                                    transition: 'all 0.2s ease',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between'
+                                }}
+                            >
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                        <div style={{ padding: '8px', borderRadius: '10px', background: 'rgba(14, 165, 233, 0.2)', color: '#38bdf8' }}>
+                                            <Globe size={22} />
+                                        </div>
+                                        {activeGateway === 'razorpay' && (
+                                            <span style={{ fontSize: '0.72rem', background: '#0ea5e9', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontWeight: '700' }}>
+                                                ACTIVE
+                                            </span>
+                                        )}
+                                    </div>
+                                    <h4 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '6px' }}>Razorpay (India & UPI)</h4>
+                                    <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                                        Accept UPI (GPay, PhonePe, Paytm), NetBanking, Credit/Debit Cards, and Wallets with real-time webhooks.
+                                    </p>
+                                </div>
+                                <div style={{ marginTop: '16px', fontSize: '0.78rem', color: '#38bdf8', fontWeight: '600' }}>
+                                    🇮🇳 Primary Indian PG
+                                </div>
+                            </div>
+
+                            {/* Card 3: Stripe Global */}
+                            <div 
+                                onClick={() => setActiveGateway('stripe')}
+                                className="glass-panel"
+                                style={{
+                                    padding: '24px',
+                                    borderRadius: '16px',
+                                    cursor: 'pointer',
+                                    border: '2px solid',
+                                    borderColor: activeGateway === 'stripe' ? '#8b5cf6' : 'var(--border-glass)',
+                                    background: activeGateway === 'stripe' ? 'rgba(139, 92, 246, 0.1)' : 'rgba(15, 23, 42, 0.4)',
+                                    transition: 'all 0.2s ease',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between'
+                                }}
+                            >
+                                <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                        <div style={{ padding: '8px', borderRadius: '10px', background: 'rgba(139, 92, 246, 0.2)', color: '#a78bfa' }}>
+                                            <Key size={22} />
+                                        </div>
+                                        {activeGateway === 'stripe' && (
+                                            <span style={{ fontSize: '0.72rem', background: '#8b5cf6', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontWeight: '700' }}>
+                                                ACTIVE
+                                            </span>
+                                        )}
+                                    </div>
+                                    <h4 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '6px' }}>Stripe (International)</h4>
+                                    <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                                        Accept multi-currency payments globally across 135+ countries in USD, EUR, GBP, and INR.
+                                    </p>
+                                </div>
+                                <div style={{ marginTop: '16px', fontSize: '0.78rem', color: '#a78bfa', fontWeight: '600' }}>
+                                    🌍 International Support
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Gateway Configuration Form */}
+                        <div className="glass-panel" style={{ padding: '32px', borderRadius: '16px' }}>
+                            <form onSubmit={handleSaveGateway} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                                
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-glass)', paddingBottom: '16px' }}>
+                                    <div>
+                                        <h3 style={{ fontSize: '1.2rem', fontWeight: '700' }}>
+                                            {activeGateway === 'sandbox' ? 'Sandbox Gateway Simulator' : activeGateway === 'razorpay' ? 'Razorpay Merchant Credentials' : 'Stripe Account Credentials'}
+                                        </h3>
+                                        <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                                            Configure environment API keys and webhook signatures.
+                                        </span>
+                                    </div>
+
+                                    {/* Test Mode Switch */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <span style={{ fontSize: '0.82rem', color: isTestMode ? '#fbbf24' : '#10b981', fontWeight: '700' }}>
+                                            {isTestMode ? 'TEST MODE' : 'LIVE PRODUCTION'}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsTestMode(!isTestMode)}
+                                            style={{
+                                                width: '46px',
+                                                height: '24px',
+                                                borderRadius: '12px',
+                                                background: isTestMode ? 'rgba(245, 158, 11, 0.4)' : '#10b981',
+                                                border: 'none',
+                                                cursor: 'pointer',
+                                                position: 'relative',
+                                                transition: 'all 0.2s ease'
+                                            }}
+                                        >
+                                            <div style={{
+                                                width: '18px',
+                                                height: '18px',
+                                                borderRadius: '50%',
+                                                background: '#fff',
+                                                position: 'absolute',
+                                                top: '3px',
+                                                left: isTestMode ? '3px' : '25px',
+                                                transition: 'all 0.2s ease'
+                                            }} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {activeGateway === 'sandbox' && (
+                                    <div style={{ padding: '16px 20px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: '10px', border: '1px solid rgba(99, 102, 241, 0.2)', fontSize: '0.88rem', color: '#cbd5e1', lineHeight: '1.6' }}>
+                                        <strong style={{ color: '#818cf8' }}>Sandbox Gateway is Active:</strong> Students can immediately purchase courses, bundles, and digital notes without real payments. Automated 18% GST tax calculation, coupon redemption, and instant enrollment remain 100% active.
+                                    </div>
+                                )}
+
+                                {activeGateway === 'razorpay' && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>
+                                                Razorpay Key ID ({isTestMode ? 'rzp_test_...' : 'rzp_live_...'})
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={razorpayKeyId}
+                                                onChange={(e) => setRazorpayKeyId(e.target.value)}
+                                                placeholder={isTestMode ? "rzp_test_YourKeyId" : "rzp_live_YourKeyId"}
+                                                className="input-field"
+                                                style={{ width: '100%', padding: '12px 14px', borderRadius: '8px' }}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>
+                                                Razorpay Key Secret
+                                            </label>
+                                            <input
+                                                type="password"
+                                                value={razorpayKeySecret}
+                                                onChange={(e) => setRazorpayKeySecret(e.target.value)}
+                                                placeholder="Enter Razorpay Secret Key"
+                                                className="input-field"
+                                                style={{ width: '100%', padding: '12px 14px', borderRadius: '8px' }}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>
+                                                Razorpay Webhook Secret (Optional for HMAC verification)
+                                            </label>
+                                            <input
+                                                type="password"
+                                                value={razorpayWebhookSecret}
+                                                onChange={(e) => setRazorpayWebhookSecret(e.target.value)}
+                                                placeholder="Enter Webhook Secret (from Razorpay Dashboard)"
+                                                className="input-field"
+                                                style={{ width: '100%', padding: '12px 14px', borderRadius: '8px' }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeGateway === 'stripe' && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>
+                                                Stripe Publishable Key ({isTestMode ? 'pk_test_...' : 'pk_live_...'})
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={stripePublishableKey}
+                                                onChange={(e) => setStripePublishableKey(e.target.value)}
+                                                placeholder={isTestMode ? "pk_test_..." : "pk_live_..."}
+                                                className="input-field"
+                                                style={{ width: '100%', padding: '12px 14px', borderRadius: '8px' }}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>
+                                                Stripe Secret Key ({isTestMode ? 'sk_test_...' : 'sk_live_...'})
+                                            </label>
+                                            <input
+                                                type="password"
+                                                value={stripeSecretKey}
+                                                onChange={(e) => setStripeSecretKey(e.target.value)}
+                                                placeholder="sk_..."
+                                                className="input-field"
+                                                style={{ width: '100%', padding: '12px 14px', borderRadius: '8px' }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Webhook Endpoint Box */}
+                                <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '12px', padding: '16px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                        <span style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                                            Server Webhook Listener URL
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(webhookUrl);
+                                                setCopiedWebhook(true);
+                                                setTimeout(() => setCopiedWebhook(false), 2000);
+                                            }}
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: copiedWebhook ? '#10b981' : '#38bdf8',
+                                                fontSize: '0.78rem',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                fontWeight: '600'
+                                            }}
+                                        >
+                                            {copiedWebhook ? <Check size={14} /> : <Copy size={14} />}
+                                            {copiedWebhook ? 'Copied URL!' : 'Copy Webhook URL'}
+                                        </button>
+                                    </div>
+                                    <code style={{ fontSize: '0.82rem', color: '#a5b4fc', wordBreak: 'break-all' }}>
+                                        {webhookUrl}
+                                    </code>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                                        Add this URL to your merchant dashboard to automatically unlock enrollments when students pay via UPI QR code or background banking.
+                                    </p>
+                                </div>
+
+                                {/* Connection Test Result Badge */}
+                                {testResult && (
+                                    <div style={{
+                                        padding: '12px 16px',
+                                        borderRadius: '8px',
+                                        fontSize: '0.85rem',
+                                        background: testResult.status === 'success' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                        border: '1px solid',
+                                        borderColor: testResult.status === 'success' ? '#10b981' : '#ef4444',
+                                        color: testResult.status === 'success' ? '#34d399' : '#f87171'
+                                    }}>
+                                        {testResult.status === 'success' ? '✓ ' : '✕ '} {testResult.message}
+                                    </div>
+                                )}
+
+                                {/* Action Buttons */}
+                                <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginTop: '10px' }}>
+                                    <button
+                                        type="submit"
+                                        className="btn-primary"
+                                        disabled={savingGateway}
+                                        style={{
+                                            padding: '12px 24px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            fontWeight: '700'
+                                        }}
+                                    >
+                                        <Save size={16} />
+                                        {savingGateway ? 'Saving Settings...' : 'Save Payment Configuration'}
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleTestConnection}
+                                        disabled={testingConnection}
+                                        className="btn-secondary"
+                                        style={{
+                                            padding: '12px 20px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px'
+                                        }}
+                                    >
+                                        <RefreshCw size={15} className={testingConnection ? 'animate-spin' : ''} />
+                                        {testingConnection ? 'Verifying...' : 'Test Gateway Connection'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 )}
 
