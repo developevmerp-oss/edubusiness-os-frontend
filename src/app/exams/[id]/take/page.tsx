@@ -13,7 +13,14 @@ import {
     RotateCcw,
     Send,
     HelpCircle,
-    Layers
+    Layers,
+    Shield,
+    ShieldAlert,
+    ShieldCheck,
+    Maximize2,
+    Minimize2,
+    AlertTriangle,
+    Lock
 } from 'lucide-react';
 
 interface TakeExamPageProps {
@@ -42,19 +49,29 @@ export default function TakeExamPage({ params }: TakeExamPageProps) {
     // Section filtering
     const [selectedSection, setSelectedSection] = useState<string>('All');
 
+    // Phase 11: Proctoring & Exam Integrity Shield
+    const [isFullscreenActive, setIsFullscreenActive] = useState(false);
+    const [showFullscreenModal, setShowFullscreenModal] = useState(true);
+    const [tabSwitchCount, setTabSwitchCount] = useState(0);
+    const [maxSwitches, setMaxSwitches] = useState(3);
+    const [showViolationModal, setShowViolationModal] = useState(false);
+    const [violationMessage, setViolationMessage] = useState('');
+    const [isTerminated, setIsTerminated] = useState(false);
+    const [lastViolationTime, setLastViolationTime] = useState(0);
+
     useEffect(() => {
         initializeExamAttempt();
     }, [examId]);
 
     // Timer countdown loop
     useEffect(() => {
-        if (timeLeft <= 0 || isSubmitting) return;
+        if (timeLeft <= 0 || isSubmitting || isTerminated) return;
 
         const interval = setInterval(() => {
             setTimeLeft(prev => {
                 if (prev <= 1) {
                     clearInterval(interval);
-                    autoSubmitExam();
+                    autoSubmitExam('timer_expired');
                     return 0;
                 }
                 return prev - 1;
@@ -62,7 +79,7 @@ export default function TakeExamPage({ params }: TakeExamPageProps) {
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [timeLeft, isSubmitting]);
+    }, [timeLeft, isSubmitting, isTerminated]);
 
     const initializeExamAttempt = async () => {
         setLoading(true);
@@ -71,6 +88,10 @@ export default function TakeExamPage({ params }: TakeExamPageProps) {
             // 1. Fetch Exam Details
             const examData = await apiRequest(`/api/exams/${examId}`);
             setExam(examData.exam);
+            setMaxSwitches(examData.exam.max_tab_switches || 3);
+            if (examData.exam.is_fullscreen_enforced === false) {
+                setShowFullscreenModal(false);
+            }
 
             // 2. Fetch Questions (anti-cheat: doesn't contain correct answers)
             const questionsData = await apiRequest(`/api/exams/${examId}/questions`);
@@ -87,6 +108,7 @@ export default function TakeExamPage({ params }: TakeExamPageProps) {
             // 3. Initialize or Resume Attempt
             const attemptData = await apiRequest(`/api/exams/${examId}/attempt`, { method: 'POST' });
             setAttemptId(attemptData.attemptId);
+            setTabSwitchCount(attemptData.tabSwitchCount || 0);
 
             // 4. Calculate Time Left
             const startTimestamp = new Date(attemptData.startedAt).getTime();
@@ -96,7 +118,10 @@ export default function TakeExamPage({ params }: TakeExamPageProps) {
 
             if (remaining <= 0) {
                 setError('The examination period has expired.');
-                await apiRequest(`/api/exams/attempts/${attemptData.attemptId}/submit`, { method: 'POST' }).catch(() => {});
+                await apiRequest(`/api/exams/attempts/${attemptData.attemptId}/submit`, { 
+                    method: 'POST',
+                    body: JSON.stringify({ submissionReason: 'timer_expired' })
+                }).catch(() => {});
                 return;
             }
 
@@ -107,6 +132,97 @@ export default function TakeExamPage({ params }: TakeExamPageProps) {
             setLoading(false);
         }
     };
+
+    const enterFullscreen = async () => {
+        try {
+            if (document.documentElement.requestFullscreen) {
+                await document.documentElement.requestFullscreen();
+            }
+            setIsFullscreenActive(true);
+            setShowFullscreenModal(false);
+            setShowViolationModal(false);
+        } catch (err) {
+            console.warn('Browser fullscreen error:', err);
+            // Allow proceeding gracefully even if restricted by user browser permission
+            setIsFullscreenActive(true);
+            setShowFullscreenModal(false);
+            setShowViolationModal(false);
+        }
+    };
+
+    const toggleFullscreen = async () => {
+        if (!document.fullscreenElement) {
+            await enterFullscreen();
+        } else {
+            if (document.exitFullscreen) {
+                await document.exitFullscreen().catch(() => {});
+            }
+        }
+    };
+
+    const triggerViolation = async (reason: string, details?: string) => {
+        const now = Date.now();
+        if (!attemptId || isSubmitting || isTerminated || showFullscreenModal || loading) return;
+        if (now - lastViolationTime < 2500) return; // Debounce triggers
+        setLastViolationTime(now);
+
+        try {
+            const res = await apiRequest(`/api/exams/attempts/${attemptId}/violation`, {
+                method: 'POST',
+                body: JSON.stringify({ reason, details })
+            });
+
+            setTabSwitchCount(res.tabSwitchCount || (tabSwitchCount + 1));
+
+            if (res.isTerminated) {
+                setIsTerminated(true);
+                setShowViolationModal(false);
+                setTimeout(() => {
+                    router.push(`/exams/${attemptId}/grade`);
+                }, 3500);
+            } else {
+                setViolationMessage(res.message || `Warning: Navigating away from the exam tab is recorded.`);
+                setShowViolationModal(true);
+            }
+        } catch (err) {
+            console.error('Failed to log proctoring violation:', err);
+        }
+    };
+
+    // Fullscreen and Tab Visibility Listeners
+    useEffect(() => {
+        if (loading || isSubmitting || isTerminated) return;
+
+        const handleFullscreenChange = () => {
+            const isFs = !!document.fullscreenElement;
+            setIsFullscreenActive(isFs);
+            if (!isFs && !showFullscreenModal && exam?.is_fullscreen_enforced !== false) {
+                triggerViolation('exit_fullscreen', 'Exited fullscreen examination mode');
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden && !showFullscreenModal) {
+                triggerViolation('tab_switch', 'Navigated to another tab or minimized browser window');
+            }
+        };
+
+        const handleWindowBlur = () => {
+            if (!showFullscreenModal && !document.hidden) {
+                triggerViolation('window_blur', 'Window lost focus or application switch detected');
+            }
+        };
+
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('blur', handleWindowBlur);
+
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('blur', handleWindowBlur);
+        };
+    }, [attemptId, loading, isSubmitting, isTerminated, showFullscreenModal, exam, lastViolationTime, tabSwitchCount]);
 
     // When student navigates to a question, mark as not_answered if it was not_visited
     const navigateToQuestion = (idx: number) => {
@@ -195,11 +311,14 @@ export default function TakeExamPage({ params }: TakeExamPageProps) {
         }));
     };
 
-    const autoSubmitExam = async () => {
+    const autoSubmitExam = async (reason = 'timer_expired') => {
         setIsSubmitting(true);
         try {
-            await apiRequest(`/api/exams/attempts/${attemptId}/submit`, { method: 'POST' });
-            alert('Time limit reached! Your examination has been automatically submitted.');
+            await apiRequest(`/api/exams/attempts/${attemptId}/submit`, { 
+                method: 'POST',
+                body: JSON.stringify({ submissionReason: reason })
+            });
+            alert(reason === 'timer_expired' ? 'Time limit reached! Your examination has been automatically submitted.' : 'Assessment session completed.');
             router.push(`/exams/${attemptId}/grade`);
         } catch (err: any) {
             alert('Failed to submit exam: ' + err.message);
@@ -211,7 +330,10 @@ export default function TakeExamPage({ params }: TakeExamPageProps) {
     const handleConfirmFinalSubmit = async () => {
         setIsSubmitting(true);
         try {
-            await apiRequest(`/api/exams/attempts/${attemptId}/submit`, { method: 'POST' });
+            await apiRequest(`/api/exams/attempts/${attemptId}/submit`, { 
+                method: 'POST',
+                body: JSON.stringify({ submissionReason: 'manual' })
+            });
             router.push(`/exams/${attemptId}/grade`);
         } catch (err: any) {
             alert(err.message || 'Submission failed.');
@@ -374,8 +496,48 @@ export default function TakeExamPage({ params }: TakeExamPageProps) {
                     </div>
                 </div>
 
-                {/* Live Countdown Timer & Submit Trigger */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                {/* Live Countdown Timer, Proctoring Pill, Fullscreen & Submit Trigger */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    {/* Proctoring Shield Pill */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        background: tabSwitchCount === 0 ? 'rgba(16, 185, 129, 0.15)' : tabSwitchCount < 2 ? 'rgba(245, 158, 11, 0.2)' : 'rgba(239, 68, 68, 0.25)',
+                        border: '1px solid',
+                        borderColor: tabSwitchCount === 0 ? '#10b981' : tabSwitchCount < 2 ? '#f59e0b' : '#ef4444',
+                        color: tabSwitchCount === 0 ? '#34d399' : tabSwitchCount < 2 ? '#fbbf24' : '#f87171',
+                        fontSize: '0.8rem',
+                        fontWeight: '700'
+                    }}>
+                        {tabSwitchCount === 0 ? <ShieldCheck size={15} /> : <ShieldAlert size={15} />}
+                        <span>Proctoring Shield: {tabSwitchCount}/{maxSwitches} Strikes</span>
+                    </div>
+
+                    {/* Fullscreen Toggle */}
+                    <button
+                        onClick={toggleFullscreen}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            background: isFullscreenActive ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                            border: '1px solid',
+                            borderColor: isFullscreenActive ? '#6366f1' : 'rgba(255, 255, 255, 0.15)',
+                            color: isFullscreenActive ? '#a5b4fc' : '#cbd5e1',
+                            fontSize: '0.8rem',
+                            cursor: 'pointer'
+                        }}
+                        title="Toggle Fullscreen Lockdown"
+                    >
+                        {isFullscreenActive ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                        <span>{isFullscreenActive ? 'Fullscreen' : 'Enter Fullscreen'}</span>
+                    </button>
+
                     <div style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -767,6 +929,259 @@ export default function TakeExamPage({ params }: TakeExamPageProps) {
                                 Resume Test
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal 1: Mandatory Fullscreen Enforcer Modal */}
+            {showFullscreenModal && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(5, 7, 15, 0.95)',
+                    backdropFilter: 'blur(12px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 200,
+                    padding: '20px'
+                }}>
+                    <div className="glass-panel" style={{
+                        maxWidth: '540px',
+                        width: '100%',
+                        padding: '36px',
+                        borderRadius: '20px',
+                        background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)',
+                        border: '1px solid rgba(99, 102, 241, 0.4)',
+                        boxShadow: '0 25px 60px rgba(0,0,0,0.8)'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
+                            <div style={{
+                                width: '50px',
+                                height: '50px',
+                                borderRadius: '14px',
+                                background: 'rgba(99, 102, 241, 0.2)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                border: '1px solid #6366f1'
+                            }}>
+                                <ShieldCheck size={28} style={{ color: '#818cf8' }} />
+                            </div>
+                            <div>
+                                <h3 style={{ fontSize: '1.35rem', fontWeight: '800', color: '#f8fafc' }}>
+                                    Security Protocol & Anti-Cheating Shield
+                                </h3>
+                                <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
+                                    Verified Institutional Assessment Environment
+                                </span>
+                            </div>
+                        </div>
+
+                        <p style={{ color: '#cbd5e1', fontSize: '0.9rem', lineHeight: '1.6', marginBottom: '22px' }}>
+                            To ensure national examination fairness and credential validity, this test operates with real-time browser integrity monitoring:
+                        </p>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '28px' }}>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                                <div style={{ color: '#38bdf8', marginTop: '2px' }}><Lock size={18} /></div>
+                                <div style={{ fontSize: '0.86rem', color: '#e2e8f0' }}>
+                                    <strong>Fullscreen Lockdown:</strong> Questions are visible exclusively in full-screen mode to prevent external browser windows.
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                                <div style={{ color: '#fbbf24', marginTop: '2px' }}><AlertTriangle size={18} /></div>
+                                <div style={{ fontSize: '0.86rem', color: '#e2e8f0' }}>
+                                    <strong>Tab-Switch Monitoring:</strong> Navigating away from this tab or minimizing the window triggers a logged security strike.
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                                <div style={{ color: '#f87171', marginTop: '2px' }}><ShieldAlert size={18} /></div>
+                                <div style={{ fontSize: '0.86rem', color: '#e2e8f0' }}>
+                                    <strong>3 Strikes Policy:</strong> Accumulating 3 tab-switches permanently terminates the session and auto-submits answers with a disqualification flag.
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={enterFullscreen}
+                            className="btn-primary"
+                            style={{
+                                width: '100%',
+                                padding: '14px',
+                                borderRadius: '12px',
+                                fontSize: '1rem',
+                                fontWeight: '800',
+                                background: 'linear-gradient(135deg, #4f46e5, #06b6d4)',
+                                boxShadow: '0 8px 25px rgba(79, 70, 229, 0.4)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '10px'
+                            }}
+                        >
+                            <Maximize2 size={18} />
+                            <span>Enter Fullscreen & Begin Assessment</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal 2: Tab-Switch Warning Modal (Strikes 1 & 2) */}
+            {showViolationModal && !isTerminated && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(15, 23, 42, 0.92)',
+                    backdropFilter: 'blur(8px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 220,
+                    padding: '20px'
+                }}>
+                    <div className="glass-panel" style={{
+                        maxWidth: '460px',
+                        width: '100%',
+                        padding: '30px',
+                        borderRadius: '16px',
+                        background: '#0f172a',
+                        border: '2px solid #f59e0b',
+                        boxShadow: '0 20px 50px rgba(245, 158, 11, 0.25)',
+                        textAlign: 'center'
+                    }}>
+                        <div style={{
+                            width: '60px',
+                            height: '60px',
+                            borderRadius: '50%',
+                            background: 'rgba(245, 158, 11, 0.15)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginBottom: '16px'
+                        }}>
+                            <ShieldAlert size={32} style={{ color: '#f59e0b' }} />
+                        </div>
+
+                        <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#fef3c7', marginBottom: '8px' }}>
+                            SECURITY VIOLATION DETECTED
+                        </h3>
+
+                        <div style={{
+                            display: 'inline-block',
+                            padding: '4px 14px',
+                            borderRadius: '9999px',
+                            background: 'rgba(239, 68, 68, 0.2)',
+                            color: '#f87171',
+                            fontWeight: '700',
+                            fontSize: '0.85rem',
+                            marginBottom: '16px'
+                        }}>
+                            Strike {tabSwitchCount} of {maxSwitches} Recorded
+                        </div>
+
+                        <p style={{ color: '#cbd5e1', fontSize: '0.9rem', lineHeight: '1.5', marginBottom: '20px' }}>
+                            {violationMessage || `You navigated away from the active examination window. This incident has been logged in your audit profile.`}
+                        </p>
+
+                        <div style={{
+                            background: 'rgba(0,0,0,0.3)',
+                            padding: '12px',
+                            borderRadius: '10px',
+                            marginBottom: '24px',
+                            fontSize: '0.82rem',
+                            color: '#94a3b8'
+                        }}>
+                            Warnings Remaining: <strong style={{ color: '#fbbf24' }}>{Math.max(0, maxSwitches - tabSwitchCount)}</strong>. On Strike {maxSwitches}, your test will auto-submit immediately.
+                        </div>
+
+                        <button
+                            onClick={enterFullscreen}
+                            className="btn-primary"
+                            style={{
+                                width: '100%',
+                                padding: '12px',
+                                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                                fontWeight: '700',
+                                fontSize: '0.95rem'
+                            }}
+                        >
+                            Return to Fullscreen & Resume
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal 3: Auto-Terminated Disqualification Modal (Strike 3) */}
+            {isTerminated && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(15, 23, 42, 0.96)',
+                    backdropFilter: 'blur(10px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 250,
+                    padding: '20px'
+                }}>
+                    <div className="glass-panel" style={{
+                        maxWidth: '480px',
+                        width: '100%',
+                        padding: '36px',
+                        borderRadius: '20px',
+                        background: '#0f172a',
+                        border: '2px solid #ef4444',
+                        boxShadow: '0 25px 60px rgba(239, 68, 68, 0.4)',
+                        textAlign: 'center'
+                    }}>
+                        <div style={{
+                            width: '70px',
+                            height: '70px',
+                            borderRadius: '50%',
+                            background: 'rgba(239, 68, 68, 0.2)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginBottom: '20px'
+                        }}>
+                            <AlertCircle size={38} style={{ color: '#ef4444' }} />
+                        </div>
+
+                        <h3 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#fecaca', marginBottom: '8px' }}>
+                            ASSESSMENT TERMINATED
+                        </h3>
+
+                        <div style={{
+                            display: 'inline-block',
+                            padding: '4px 14px',
+                            borderRadius: '9999px',
+                            background: '#ef4444',
+                            color: '#ffffff',
+                            fontWeight: '800',
+                            fontSize: '0.85rem',
+                            marginBottom: '16px'
+                        }}>
+                            Disqualification: {maxSwitches} / {maxSwitches} Strikes Exceeded
+                        </div>
+
+                        <p style={{ color: '#cbd5e1', fontSize: '0.92rem', lineHeight: '1.6', marginBottom: '24px' }}>
+                            You have navigated away from the exam tab {maxSwitches} times. As per institutional integrity rules, your assessment has been frozen, auto-submitted, and flagged for instructor review.
+                        </p>
+
+                        <button
+                            onClick={() => router.push(`/exams/${attemptId}/grade`)}
+                            className="btn-primary"
+                            style={{
+                                width: '100%',
+                                padding: '14px',
+                                background: 'linear-gradient(135deg, #ef4444, #b91c1c)',
+                                fontWeight: '800',
+                                fontSize: '1rem'
+                            }}
+                        >
+                            View Assessment Scorecard
+                        </button>
                     </div>
                 </div>
             )}

@@ -4,7 +4,7 @@ import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import SidebarLayout from '../../../../components/SidebarLayout';
 import { apiRequest } from '../../../../utils/api';
-import { Award, CheckCircle, XCircle, Clock, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Award, CheckCircle, XCircle, Clock, AlertCircle, ArrowLeft, ShieldCheck, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 
 interface GradePageProps {
@@ -119,6 +119,111 @@ export default function GradePage({ params }: GradePageProps) {
                             </span>
                         )}
                     </div>
+                </div>
+
+                {/* Proctoring & Session Integrity Audit Card */}
+                <div className="glass-panel" style={{
+                    padding: '24px 30px',
+                    borderRadius: '16px',
+                    border: '1px solid',
+                    borderColor: attempt.submission_reason === 'terminated_tab_switch_limit' 
+                        ? 'rgba(239, 68, 68, 0.4)' 
+                        : (attempt.tab_switch_count || 0) > 0 
+                            ? 'rgba(245, 158, 11, 0.4)' 
+                            : 'rgba(16, 185, 129, 0.4)',
+                    background: attempt.submission_reason === 'terminated_tab_switch_limit'
+                        ? 'rgba(239, 68, 68, 0.05)'
+                        : (attempt.tab_switch_count || 0) > 0
+                            ? 'rgba(245, 158, 11, 0.05)'
+                            : 'rgba(16, 185, 129, 0.05)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '16px'
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                            <div style={{
+                                width: '44px',
+                                height: '44px',
+                                borderRadius: '12px',
+                                background: attempt.submission_reason === 'terminated_tab_switch_limit'
+                                    ? 'rgba(239, 68, 68, 0.2)'
+                                    : (attempt.tab_switch_count || 0) > 0
+                                        ? 'rgba(245, 158, 11, 0.2)'
+                                        : 'rgba(16, 185, 129, 0.2)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}>
+                                {attempt.submission_reason === 'terminated_tab_switch_limit' ? (
+                                    <ShieldAlert size={24} style={{ color: '#ef4444' }} />
+                                ) : (attempt.tab_switch_count || 0) > 0 ? (
+                                    <ShieldAlert size={24} style={{ color: '#f59e0b' }} />
+                                ) : (
+                                    <ShieldCheck size={24} style={{ color: '#10b981' }} />
+                                )}
+                            </div>
+                            <div>
+                                <h4 style={{ fontSize: '1.05rem', fontWeight: '700', color: 'var(--text-primary)' }}>
+                                    Session Integrity & Proctoring Audit
+                                </h4>
+                                <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                                    {attempt.submission_reason === 'terminated_tab_switch_limit'
+                                        ? 'Test Auto-Terminated due to multiple unauthorized tab navigation events.'
+                                        : (attempt.tab_switch_count || 0) > 0
+                                            ? `${attempt.tab_switch_count} tab switch warning(s) logged during examination.`
+                                            : 'High Integrity: 0 tab violations recorded. Clean session.'}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                            <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Tab Strikes</div>
+                                <div style={{
+                                    fontSize: '1.1rem',
+                                    fontWeight: '800',
+                                    color: (attempt.tab_switch_count || 0) >= 3 ? '#ef4444' : (attempt.tab_switch_count || 0) > 0 ? '#f59e0b' : '#10b981'
+                                }}>
+                                    {attempt.tab_switch_count || 0} / {attempt.max_tab_switches || 3}
+                                </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Submission Type</div>
+                                <span style={{
+                                    fontSize: '0.75rem',
+                                    padding: '4px 10px',
+                                    borderRadius: '6px',
+                                    fontWeight: '700',
+                                    background: attempt.submission_reason === 'terminated_tab_switch_limit' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                                    color: attempt.submission_reason === 'terminated_tab_switch_limit' ? '#f87171' : '#34d399'
+                                }}>
+                                    {attempt.submission_reason === 'terminated_tab_switch_limit' ? 'DISQUALIFIED / AUTO-SUBMITTED' : attempt.submission_reason === 'timer_expired' ? 'TIMER AUTO-SUBMIT' : 'MANUAL SUBMIT'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Detailed Flags Trail if any */}
+                    {Array.isArray(attempt.proctoring_flags) && attempt.proctoring_flags.length > 0 && (
+                        <div style={{ borderTop: '1px solid var(--border-glass)', paddingTop: '12px', marginTop: '4px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-secondary)' }}>Security Violation Timeline:</span>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                                {attempt.proctoring_flags.map((flag: any, fIdx: number) => (
+                                    <div key={fIdx} style={{
+                                        fontSize: '0.75rem',
+                                        padding: '4px 10px',
+                                        borderRadius: '6px',
+                                        background: 'rgba(0,0,0,0.3)',
+                                        border: '1px solid rgba(255,255,255,0.08)',
+                                        color: '#cbd5e1'
+                                    }}>
+                                        <strong style={{ color: '#fbbf24' }}>Strike #{flag.strikeNumber || (fIdx + 1)}:</strong> {flag.details || flag.reason} ({new Date(flag.timestamp).toLocaleTimeString()})
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {isDescriptivePending && (
