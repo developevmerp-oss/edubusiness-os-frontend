@@ -86,7 +86,7 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
                 (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'C' || e.key === 'J')) ||
                 (e.ctrlKey && e.key === 'u')
             ) {
-                setAntiPiracyAlert('Screen capture and inspection are prohibited by Classplus-grade DRM security.');
+                setAntiPiracyAlert('Screen capture and inspection are prohibited by DRM security protection.');
                 setTimeout(() => setAntiPiracyAlert(''), 4500);
             }
         };
@@ -355,7 +355,7 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
                                         color: '#818cf8'
                                     }}>
                                         <ShieldCheck size={14} style={{ color: '#6366f1' }} />
-                                        <span>Classplus DRM Active • Dynamic Watermark</span>
+                                        <span>DRM Security Active • Dynamic Watermark</span>
                                     </div>
                                 )}
                             </div>
@@ -383,7 +383,7 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
                             <div 
                                 onContextMenu={(e) => {
                                     e.preventDefault();
-                                    setAntiPiracyAlert('Right click is disabled by Classplus DRM protection.');
+                                    setAntiPiracyAlert('Right click is disabled by DRM security protection.');
                                     setTimeout(() => setAntiPiracyAlert(''), 3000);
                                 }}
                                 style={{ 

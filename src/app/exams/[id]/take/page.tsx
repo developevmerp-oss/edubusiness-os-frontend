@@ -261,6 +261,26 @@ export default function TakeExamPage({ params }: TakeExamPageProps) {
         );
     }
 
+    if (!loading && (!questions || questions.length === 0)) {
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0a0b10', gap: '20px', padding: '20px', textAlign: 'center' }}>
+                <HelpCircle size={48} style={{ color: '#6366f1' }} />
+                <div style={{ color: 'var(--text-primary)', fontSize: '1.3rem', fontWeight: 'bold' }}>No Questions Found in Exam</div>
+                <p style={{ color: 'var(--text-secondary)', maxWidth: '420px', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                    This examination ("{exam?.title || 'Exam'}") does not have any questions added yet. Please add questions or generate them with AI from the Exam Management dashboard.
+                </p>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                    <button onClick={() => router.push(`/exams/${examId}/generate`)} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        Generate with AI
+                    </button>
+                    <button onClick={() => router.push('/exams')} className="btn-secondary">
+                        Back to Exams
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     const currentQuestion = questions[currentIndex];
     const selectedAnswer = answers[currentQuestion?.id] || '';
 
@@ -321,7 +341,7 @@ export default function TakeExamPage({ params }: TakeExamPageProps) {
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.2)', border: '1px solid #6366f1', color: '#a5b4fc', fontWeight: 'bold' }}>
-                                NTA SIMULATOR
+                                EXAM SIMULATOR (NTA PATTERN)
                             </span>
                             <h2 style={{ fontSize: '1.15rem', fontWeight: '700', color: '#f8fafc' }}>{exam.title}</h2>
                         </div>

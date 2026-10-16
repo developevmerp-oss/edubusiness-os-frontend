@@ -298,7 +298,7 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
                                 <div style={{ flex: 1 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                                         <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(236, 72, 153, 0.2)', color: '#f472b6', fontWeight: 'bold' }}>
-                                            ⚡ TAGMANGO ORDER BUMP
+                                            ⚡ VIP 1-CLICK ORDER BUMP
                                         </span>
                                         <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 'bold' }}>Save 67%</span>
                                     </div>
