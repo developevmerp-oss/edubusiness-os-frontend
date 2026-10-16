@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -14,15 +14,31 @@ export default function LoginPage() {
     const [success, setSuccess] = useState('');
 
     // Credentials
+    const [authMode, setAuthMode] = useState<'password' | 'otp'>('password');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+
+    // Mobile Phone OTP fields
+    const [phone, setPhone] = useState('');
+    const [otpCode, setOtpCode] = useState('');
+    const [otpSent, setOtpSent] = useState(false);
+    const [resendTimer, setResendTimer] = useState(0);
+    const [demoOtpHint, setDemoOtpHint] = useState('');
 
     // Register Tenant fields
     const [tenantName, setTenantName] = useState('');
     const [regSubdomain, setRegSubdomain] = useState('');
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
+
+    useEffect(() => {
+        let timer: any;
+        if (resendTimer > 0) {
+            timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+        }
+        return () => clearTimeout(timer);
+    }, [resendTimer]);
 
     useEffect(() => {
         setSubdomainState(getSubdomain());
@@ -73,6 +89,59 @@ export default function LoginPage() {
             setLoading(false);
         }
     };
+
+    const handleSendOtp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+        setSuccess('');
+
+        try {
+            const data = await apiRequest('/api/auth/send-otp', {
+                method: 'POST',
+                body: JSON.stringify({ phone })
+            });
+
+            setOtpSent(true);
+            setResendTimer(30);
+            if (data.demoOtp) {
+                setDemoOtpHint(data.demoOtp);
+            }
+            setSuccess(`OTP sent to ${phone}. Enter verification code below.`);
+        } catch (err: any) {
+            setError(err.message || 'Failed to send OTP. Please check your phone number.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVerifyOtp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+        setSuccess('');
+
+        try {
+            const data = await apiRequest('/api/auth/verify-otp', {
+                method: 'POST',
+                body: JSON.stringify({ phone, otp: otpCode })
+            });
+
+            localStorage.setItem('user_profile', JSON.stringify(data.user));
+            localStorage.setItem('tenant_info', JSON.stringify(data.tenant));
+            localStorage.setItem('tenant_subdomain', data.tenant.subdomain);
+
+            setSuccess('Mobile verification verified! Redirecting to student portal...');
+            setTimeout(() => {
+                router.push('/dashboard');
+            }, 1000);
+        } catch (err: any) {
+            setError(err.message || 'Invalid verification code. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
     const handleRegisterTenant = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -287,58 +356,213 @@ export default function LoginPage() {
                         </button>
                     </form>
                 ) : (
-                    /* Login Form */
-                    <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                        <div>
-                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Email Address</label>
-                            <input 
-                                type="email" 
-                                className="glass-input" 
-                                placeholder="email@domain.com"
-                                required 
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                            />
+                    /* Tabbed Login: Email & Password OR Instant Mobile OTP */
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        {/* Tab Switcher */}
+                        <div style={{
+                            display: 'flex',
+                            background: 'rgba(255, 255, 255, 0.04)',
+                            padding: '4px',
+                            borderRadius: '12px',
+                            border: '1px solid var(--border-glass)'
+                        }}>
+                            <button
+                                type="button"
+                                onClick={() => { setAuthMode('password'); setError(''); setSuccess(''); }}
+                                style={{
+                                    flex: 1,
+                                    padding: '8px 12px',
+                                    borderRadius: '8px',
+                                    border: 'none',
+                                    fontSize: '0.85rem',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    background: authMode === 'password' ? 'var(--primary)' : 'transparent',
+                                    color: authMode === 'password' ? '#fff' : 'var(--text-muted)',
+                                    transition: 'all 0.2s ease'
+                                }}
+                            >
+                                Email & Password
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setAuthMode('otp'); setError(''); setSuccess(''); }}
+                                style={{
+                                    flex: 1,
+                                    padding: '8px 12px',
+                                    borderRadius: '8px',
+                                    border: 'none',
+                                    fontSize: '0.85rem',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    background: authMode === 'otp' ? 'var(--primary)' : 'transparent',
+                                    color: authMode === 'otp' ? '#fff' : 'var(--text-muted)',
+                                    transition: 'all 0.2s ease'
+                                }}
+                            >
+                                Mobile Phone (OTP)
+                            </button>
                         </div>
-                        <div>
-                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Password</label>
-                            <div style={{ position: 'relative' }}>
-                                <input 
-                                    type={showPassword ? "text" : "password"} 
-                                    className="glass-input" 
-                                    placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
-                                    required 
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    style={{ paddingRight: '40px' }}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    style={{
-                                        position: 'absolute',
-                                        right: '12px',
-                                        top: '50%',
-                                        transform: 'translateY(-50%)',
-                                        background: 'none',
-                                        border: 'none',
-                                        color: 'var(--text-muted)',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        padding: 0
-                                    }}
-                                >
-                                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+
+                        {authMode === 'password' ? (
+                            /* Email & Password Form */
+                            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Email Address</label>
+                                    <input 
+                                        type="email" 
+                                        className="glass-input" 
+                                        placeholder="email@domain.com"
+                                        required 
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Password</label>
+                                    <div style={{ position: 'relative' }}>
+                                        <input 
+                                            type={showPassword ? "text" : "password"} 
+                                            className="glass-input" 
+                                            placeholder="••••••••"
+                                            required 
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            style={{ paddingRight: '40px' }}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            style={{
+                                                position: 'absolute',
+                                                right: '12px',
+                                                top: '50%',
+                                                transform: 'translateY(-50%)',
+                                                background: 'none',
+                                                border: 'none',
+                                                color: 'var(--text-muted)',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                padding: 0
+                                            }}
+                                        >
+                                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <button type="submit" className="btn-primary" style={{ marginTop: '10px' }} disabled={loading}>
+                                    {loading ? 'Signing In...' : 'Access Dashboard'}
                                 </button>
+                            </form>
+                        ) : (
+                            /* Mobile Phone Instant OTP Form */
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                                        Registered Mobile Number
+                                    </label>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <span style={{
+                                            padding: '10px 14px',
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid var(--border-glass)',
+                                            borderRadius: '8px',
+                                            fontSize: '0.9rem',
+                                            color: 'var(--text-secondary)',
+                                            display: 'flex',
+                                            alignItems: 'center'
+                                        }}>
+                                            🇮🇳 +91
+                                        </span>
+                                        <input 
+                                            type="tel" 
+                                            className="glass-input" 
+                                            placeholder="9876543210"
+                                            required 
+                                            value={phone}
+                                            onChange={(e) => setPhone(e.target.value)}
+                                            disabled={otpSent && loading}
+                                        />
+                                    </div>
+                                </div>
+
+                                {!otpSent ? (
+                                    <button 
+                                        type="button" 
+                                        onClick={handleSendOtp}
+                                        className="btn-primary" 
+                                        style={{ marginTop: '6px' }} 
+                                        disabled={loading || phone.trim().length < 10}
+                                    >
+                                        {loading ? 'Sending OTP...' : 'Get Instant Login OTP'}
+                                    </button>
+                                ) : (
+                                    <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                        <div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                                    Enter 6-Digit OTP
+                                                </label>
+                                                {demoOtpHint && (
+                                                    <span style={{
+                                                        fontSize: '0.75rem',
+                                                        color: 'var(--primary)',
+                                                        background: 'rgba(99, 102, 241, 0.15)',
+                                                        padding: '2px 8px',
+                                                        borderRadius: '6px',
+                                                        fontWeight: '600'
+                                                    }}>
+                                                        Test Code: {demoOtpHint}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <input 
+                                                type="text" 
+                                                className="glass-input" 
+                                                placeholder="••••••"
+                                                maxLength={6}
+                                                required 
+                                                value={otpCode}
+                                                onChange={(e) => setOtpCode(e.target.value)}
+                                                style={{ textAlign: 'center', letterSpacing: '0.3em', fontSize: '1.2rem', fontWeight: '700' }}
+                                                autoFocus
+                                            />
+                                        </div>
+
+                                        <button type="submit" className="btn-primary" disabled={loading || otpCode.length !== 6}>
+                                            {loading ? 'Verifying...' : 'Verify & Enter Academy'}
+                                        </button>
+
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => { setOtpSent(false); setOtpCode(''); }}
+                                                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline' }}
+                                            >
+                                                Change Number
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleSendOtp}
+                                                disabled={resendTimer > 0 || loading}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    color: resendTimer > 0 ? 'var(--text-muted)' : 'var(--primary)',
+                                                    cursor: resendTimer > 0 ? 'default' : 'pointer',
+                                                    fontWeight: '600'
+                                                }}
+                                            >
+                                                {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend Code'}
+                                            </button>
+                                        </div>
+                                    </form>
+                                )}
                             </div>
-                        </div>
-
-                        <button type="submit" className="btn-primary" style={{ marginTop: '10px' }} disabled={loading}>
-                            {loading ? 'Signing In...' : 'Access Dashboard'}
-                        </button>
-
+                        )}
                         <div style={{
                             textAlign: 'center',
                             marginTop: '20px',
@@ -363,7 +587,7 @@ export default function LoginPage() {
                                 Register now
                             </button>
                         </div>
-                    </form>
+                    </div>
                 )}
             </div>
         </div>

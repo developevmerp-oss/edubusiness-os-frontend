@@ -38,11 +38,20 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
     const [couponError, setCouponError] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [includeOrderBump, setIncludeOrderBump] = useState(false);
+    const [referralCode, setReferralCode] = useState('');
 
     const ORDER_BUMP_PRICE = 199.00;
 
     useEffect(() => {
         fetchCourseAndSyllabus();
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const ref = params.get('ref') || localStorage.getItem('affiliate_ref');
+            if (ref) {
+                setReferralCode(ref.toUpperCase());
+                localStorage.setItem('affiliate_ref', ref.toUpperCase());
+            }
+        }
     }, [courseId]);
 
     const fetchCourseAndSyllabus = async () => {
@@ -58,6 +67,30 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
             setError(err.message || 'Failed to load course store details.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleOpenCheckout = () => {
+        setIsCheckoutOpen(true);
+        // Track cart initiation for Abandoned Cart recovery nudges
+        const storedUser = localStorage.getItem('user_profile');
+        if (storedUser) {
+            try {
+                const u = JSON.parse(storedUser);
+                if (u && (u.email || u.first_name)) {
+                    apiRequest('/api/marketing/abandoned-carts/record', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            studentName: `${u.first_name || 'Student'} ${u.last_name || ''}`.trim(),
+                            studentPhone: u.phone || '+919876543210',
+                            studentEmail: u.email,
+                            courseId: courseId,
+                            courseTitle: course?.title || 'Selected Course',
+                            cartValue: parseFloat(course?.price || 0)
+                        })
+                    }).catch(() => {});
+                }
+            } catch (e) {}
         }
     };
 
@@ -80,22 +113,26 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
     const handleCheckout = async () => {
         setIsProcessing(true);
         try {
-            // 1. Create Checkout Order (including order bump if selected)
+            // 1. Create Checkout Order (including order bump and referral code if present)
             const checkoutData = await apiRequest('/api/store/checkout', {
                 method: 'POST',
                 body: JSON.stringify({
                     courseId,
                     couponCode: appliedCoupon ? appliedCoupon.code : undefined,
                     gateway: 'sandbox',
-                    orderBump: includeOrderBump
+                    orderBump: includeOrderBump,
+                    referralCode: referralCode || undefined
                 })
             });
 
             const orderId = checkoutData.order.id;
 
-            // 2. Automatically Verify Sandbox Payment
+            // 2. Automatically Verify Sandbox Payment & Attribute Referral
             await apiRequest(`/api/store/checkout/${orderId}/verify`, {
-                method: 'POST'
+                method: 'POST',
+                body: JSON.stringify({
+                    referralCode: referralCode || undefined
+                })
             });
 
             const successMsg = includeOrderBump 
@@ -231,8 +268,25 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
                             </div>
                         </div>
 
+                        {referralCode && (
+                            <div style={{
+                                padding: '8px 12px',
+                                background: 'rgba(99, 102, 241, 0.12)',
+                                border: '1px solid rgba(99, 102, 241, 0.3)',
+                                borderRadius: '8px',
+                                fontSize: '0.78rem',
+                                color: 'var(--primary)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between'
+                            }}>
+                                <span>Affiliate Referral Applied:</span>
+                                <strong>{referralCode}</strong>
+                            </div>
+                        )}
+
                         <button 
-                            onClick={() => setIsCheckoutOpen(true)}
+                            onClick={handleOpenCheckout}
                             className="btn-primary" 
                             style={{ width: '100%', padding: '12px' }}
                         >
