@@ -19,10 +19,80 @@ export default function StoreCatalogPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [actionMsg, setActionMsg] = useState('');
     const [buyingId, setBuyingId] = useState<string | null>(null);
+    const [userRole, setUserRole] = useState('');
+
+    // Creation modals state
+    const [isCreatingBundle, setIsCreatingBundle] = useState(false);
+    const [bundleTitle, setBundleTitle] = useState('');
+    const [bundleDesc, setBundleDesc] = useState('');
+    const [bundlePrice, setBundlePrice] = useState(4999);
+    const [bundleOrigPrice, setBundleOrigPrice] = useState(7999);
+
+    const [isCreatingDigital, setIsCreatingDigital] = useState(false);
+    const [digitalTitle, setDigitalTitle] = useState('');
+    const [digitalDesc, setDigitalDesc] = useState('');
+    const [digitalCategory, setDigitalCategory] = useState('Formula Notes');
+    const [digitalPrice, setDigitalPrice] = useState(199);
+    const [digitalFileUrl, setDigitalFileUrl] = useState('https://scaloy.com/samples/notes.pdf');
 
     useEffect(() => {
+        const storedUser = localStorage.getItem('user_profile');
+        if (storedUser) {
+            try {
+                setUserRole(JSON.parse(storedUser).role);
+            } catch (e) {}
+        }
         fetchAllCatalog();
     }, []);
+
+    const handleCreateBundle = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            const incCourses = courses.slice(0, 3).map(c => ({ id: c.id, title: c.title }));
+            await apiRequest('/api/store/bundles', {
+                method: 'POST',
+                body: JSON.stringify({
+                    title: bundleTitle,
+                    description: bundleDesc,
+                    bundlePrice: Number(bundlePrice),
+                    originalPrice: Number(bundleOrigPrice),
+                    coursesIncluded: incCourses.length > 0 ? incCourses : [{ id: 'core', title: 'Full Curriculum Bundle' }]
+                })
+            });
+            setIsCreatingBundle(false);
+            setBundleTitle('');
+            setBundleDesc('');
+            setActionMsg('Combo Super Pack Bundle created and published successfully!');
+            fetchAllCatalog();
+            setTimeout(() => setActionMsg(''), 5000);
+        } catch (err: any) {
+            alert(err.message || 'Failed to create bundle.');
+        }
+    };
+
+    const handleCreateDigital = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await apiRequest('/api/store/digital-products', {
+                method: 'POST',
+                body: JSON.stringify({
+                    title: digitalTitle,
+                    description: digitalDesc,
+                    category: digitalCategory,
+                    price: Number(digitalPrice),
+                    fileUrl: digitalFileUrl
+                })
+            });
+            setIsCreatingDigital(false);
+            setDigitalTitle('');
+            setDigitalDesc('');
+            setActionMsg('Digital Product / Notes published to store catalog successfully!');
+            fetchAllCatalog();
+            setTimeout(() => setActionMsg(''), 5000);
+        } catch (err: any) {
+            alert(err.message || 'Failed to publish digital product.');
+        }
+    };
 
     const fetchAllCatalog = async () => {
         setLoading(true);
@@ -207,6 +277,168 @@ export default function StoreCatalogPage() {
                         <FileText size={16} /> Digital Notes & PDF Booklets ({digitalProducts.length})
                     </button>
                 </div>
+
+                {/* Admin Management Action Bar */}
+                {(userRole === 'admin' || userRole === 'teacher') && (
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {activeTab === 'bundles' && (
+                            <button
+                                onClick={() => setIsCreatingBundle(!isCreatingBundle)}
+                                className="btn-primary"
+                                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                            >
+                                {isCreatingBundle ? 'Close Form' : '+ Create Combo Super Pack'}
+                            </button>
+                        )}
+                        {activeTab === 'digital' && (
+                            <button
+                                onClick={() => setIsCreatingDigital(!isCreatingDigital)}
+                                className="btn-primary"
+                                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                            >
+                                {isCreatingDigital ? 'Close Form' : '+ Publish Digital Notes / PDF'}
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* Create Bundle Form */}
+                {isCreatingBundle && (
+                    <form onSubmit={handleCreateBundle} style={{
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: '1px solid var(--border-glass)',
+                        borderRadius: '16px',
+                        padding: '24px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '16px'
+                    }}>
+                        <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Create New Combo Super Pack Bundle</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Bundle Title</label>
+                                <input 
+                                    type="text" 
+                                    className="glass-input" 
+                                    placeholder="e.g. PCM Entrance Super Pack 2026"
+                                    required 
+                                    value={bundleTitle}
+                                    onChange={e => setBundleTitle(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Combo Discounted Price (₹)</label>
+                                <input 
+                                    type="number" 
+                                    className="glass-input" 
+                                    required 
+                                    value={bundlePrice}
+                                    onChange={e => setBundlePrice(Number(e.target.value))}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Original Separate Total (₹)</label>
+                                <input 
+                                    type="number" 
+                                    className="glass-input" 
+                                    required 
+                                    value={bundleOrigPrice}
+                                    onChange={e => setBundleOrigPrice(Number(e.target.value))}
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Bundle Description</label>
+                            <textarea 
+                                className="glass-input" 
+                                rows={2}
+                                placeholder="Describe all curriculum and bonus items included in this super pack..."
+                                value={bundleDesc}
+                                onChange={e => setBundleDesc(e.target.value)}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button type="submit" className="btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem' }}>Publish Super Pack Bundle</button>
+                            <button type="button" onClick={() => setIsCreatingBundle(false)} className="btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem' }}>Cancel</button>
+                        </div>
+                    </form>
+                )}
+
+                {/* Create Digital Product Form */}
+                {isCreatingDigital && (
+                    <form onSubmit={handleCreateDigital} style={{
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: '1px solid var(--border-glass)',
+                        borderRadius: '16px',
+                        padding: '24px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '16px'
+                    }}>
+                        <h3 style={{ fontSize: '1.15rem', fontWeight: '700' }}>Publish Digital Product / Formula Notes</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Product Title</label>
+                                <input 
+                                    type="text" 
+                                    className="glass-input" 
+                                    placeholder="e.g. VIP Handwritten Formula Booklet"
+                                    required 
+                                    value={digitalTitle}
+                                    onChange={e => setDigitalTitle(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Category</label>
+                                <select 
+                                    className="glass-input" 
+                                    value={digitalCategory}
+                                    onChange={e => setDigitalCategory(e.target.value)}
+                                >
+                                    <option value="Formula Notes">Formula Notes</option>
+                                    <option value="Question Bank">Question Bank</option>
+                                    <option value="Test Series PDF">Test Series PDF</option>
+                                    <option value="Cheat Sheet">Cheat Sheet</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Price (₹)</label>
+                                <input 
+                                    type="number" 
+                                    className="glass-input" 
+                                    required 
+                                    value={digitalPrice}
+                                    onChange={e => setDigitalPrice(Number(e.target.value))}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Downloadable PDF URL</label>
+                                <input 
+                                    type="url" 
+                                    className="glass-input" 
+                                    placeholder="https://.../notes.pdf"
+                                    required 
+                                    value={digitalFileUrl}
+                                    onChange={e => setDigitalFileUrl(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Description</label>
+                            <textarea 
+                                className="glass-input" 
+                                rows={2}
+                                placeholder="Summary of what is covered in this document..."
+                                value={digitalDesc}
+                                onChange={e => setDigitalDesc(e.target.value)}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button type="submit" className="btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem' }}>Publish Digital Product</button>
+                            <button type="button" onClick={() => setIsCreatingDigital(false)} className="btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem' }}>Cancel</button>
+                        </div>
+                    </form>
+                )}
 
                 {/* ========================================================
                     TAB 1: INDIVIDUAL COURSES
