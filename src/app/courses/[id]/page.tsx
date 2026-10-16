@@ -14,9 +14,13 @@ import {
     ChevronRight,
     PlayCircle,
     Sparkles,
-    Award
+    Award,
+    ShieldCheck,
+    Lock,
+    EyeOff
 } from 'lucide-react';
 import Link from 'next/link';
+
 interface CourseDetailPageProps {
     params: Promise<{ id: string }>;
 }
@@ -27,8 +31,10 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
     const [course, setCourse] = useState<any>(null);
     const [sections, setSections] = useState<any[]>([]);
     const [userRole, setUserRole] = useState('');
+    const [userProfile, setUserProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [antiPiracyAlert, setAntiPiracyAlert] = useState('');
 
     // Toggle Section state
     const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
@@ -45,23 +51,48 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
     const [materialType, setMaterialType] = useState<'video' | 'pdf' | 'notes' | 'link'>('video');
     const [materialUrl, setMaterialUrl] = useState('');
 
-    const [watermarkPos, setWatermarkPos] = useState({ top: '20%', left: '20%' });
+    // Dynamic DRM Watermark positions
+    const [watermarkPos, setWatermarkPos] = useState({ top: '25%', left: '25%' });
+    const [currentTimeStamp, setCurrentTimeStamp] = useState('');
 
     useEffect(() => {
-        const interval = setInterval(() => {
-            const topVal = Math.floor(Math.random() * 70) + 10;
-            const leftVal = Math.floor(Math.random() * 60) + 10;
+        const moveInterval = setInterval(() => {
+            const topVal = Math.floor(Math.random() * 65) + 12;
+            const leftVal = Math.floor(Math.random() * 55) + 12;
             setWatermarkPos({ top: `${topVal}%`, left: `${leftVal}%` });
-        }, 5000);
-        return () => clearInterval(interval);
+            setCurrentTimeStamp(new Date().toLocaleTimeString('en-US', { hour12: false }));
+        }, 4000);
+
+        setCurrentTimeStamp(new Date().toLocaleTimeString('en-US', { hour12: false }));
+
+        return () => clearInterval(moveInterval);
     }, []);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user_profile');
         if (storedUser) {
-            setUserRole(JSON.parse(storedUser).role);
+            try {
+                const parsed = JSON.parse(storedUser);
+                setUserRole(parsed.role);
+                setUserProfile(parsed);
+            } catch (e) {}
         }
         fetchCourseAndSyllabus();
+
+        // Anti-screen capture / DevTools deterrence listener
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (
+                e.key === 'PrintScreen' ||
+                (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'C' || e.key === 'J')) ||
+                (e.ctrlKey && e.key === 'u')
+            ) {
+                setAntiPiracyAlert('Screen capture and inspection are prohibited by Classplus-grade DRM security.');
+                setTimeout(() => setAntiPiracyAlert(''), 4500);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
     }, [courseId]);
 
     const fetchCourseAndSyllabus = async () => {
@@ -302,38 +333,131 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                     {activeMaterial ? (
                         <div className="glass-panel" style={{ flex: 1, padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                            <div style={{ borderBottom: '1px solid var(--border-glass)', paddingBottom: '16px' }}>
-                                <span style={{ textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '700', color: 'var(--primary)', display: 'block', marginBottom: '4px' }}>
-                                    TYPE: {activeMaterial.type.toUpperCase()}
-                                </span>
-                                <h2 style={{ fontSize: '1.5rem', fontWeight: '700' }}>{activeMaterial.title}</h2>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-glass)', paddingBottom: '16px' }}>
+                                <div>
+                                    <span style={{ textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '700', color: 'var(--primary)', display: 'block', marginBottom: '4px' }}>
+                                        TYPE: {activeMaterial.type.toUpperCase()}
+                                    </span>
+                                    <h2 style={{ fontSize: '1.5rem', fontWeight: '700' }}>{activeMaterial.title}</h2>
+                                </div>
+                                
+                                {activeMaterial.type === 'video' && (
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        padding: '6px 12px',
+                                        background: 'rgba(99, 102, 241, 0.12)',
+                                        border: '1px solid rgba(99, 102, 241, 0.3)',
+                                        borderRadius: '20px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: '600',
+                                        color: '#818cf8'
+                                    }}>
+                                        <ShieldCheck size={14} style={{ color: '#6366f1' }} />
+                                        <span>Classplus DRM Active • Dynamic Watermark</span>
+                                    </div>
+                                )}
                             </div>
 
+                            {/* Anti-piracy alert banner */}
+                            {antiPiracyAlert && (
+                                <div style={{
+                                    padding: '10px 16px',
+                                    borderRadius: '8px',
+                                    background: 'rgba(239, 68, 68, 0.15)',
+                                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                                    color: '#f87171',
+                                    fontSize: '0.85rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    animation: 'pulse 1.5s infinite'
+                                }}>
+                                    <Lock size={15} />
+                                    <span>{antiPiracyAlert}</span>
+                                </div>
+                            )}
+
                             {/* Dynamic Player Element */}
-                            <div style={{ flex: 1, background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '12px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                            <div 
+                                onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    setAntiPiracyAlert('Right click is disabled by Classplus DRM protection.');
+                                    setTimeout(() => setAntiPiracyAlert(''), 3000);
+                                }}
+                                style={{ 
+                                    flex: 1, 
+                                    background: '#090a10', 
+                                    border: '1px solid var(--border-glass)', 
+                                    borderRadius: '12px', 
+                                    overflow: 'hidden', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    position: 'relative',
+                                    userSelect: 'none'
+                                }}
+                            >
                                 {activeMaterial.type === 'video' ? (
                                     <>
                                         <video 
-                                            key={activeMaterial.id} // Enforces reload on item click
+                                            key={activeMaterial.id}
                                             controls 
+                                            controlsList="nodownload"
+                                            disablePictureInPicture
                                             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                                             src={activeMaterial.url}
                                         />
+
+                                        {/* 1. Subtle Multi-point Background DRM Grid (Prevents Cropping) */}
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: 0, left: 0, right: 0, bottom: 0,
+                                            display: 'grid',
+                                            gridTemplateColumns: 'repeat(3, 1fr)',
+                                            gridTemplateRows: 'repeat(3, 1fr)',
+                                            pointerEvents: 'none',
+                                            opacity: 0.05,
+                                            zIndex: 8,
+                                            padding: '20px'
+                                        }}>
+                                            {[...Array(9)].map((_, i) => (
+                                                <div key={i} style={{ fontSize: '0.7rem', transform: 'rotate(-20deg)', color: '#ffffff' }}>
+                                                    {userProfile?.email || 'student@abc.com'} • {userProfile?.phone || '+91 98765 43210'}
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* 2. Primary Bouncing Dynamic Watermark (Classplus Standard) */}
                                         <div style={{
                                             position: 'absolute',
                                             top: watermarkPos.top,
                                             left: watermarkPos.left,
                                             pointerEvents: 'none',
-                                            color: 'rgba(255, 255, 255, 0.15)',
-                                            fontSize: '0.85rem',
-                                            fontWeight: 'bold',
-                                            fontFamily: 'sans-serif',
+                                            background: 'rgba(15, 23, 42, 0.45)',
+                                            backdropFilter: 'blur(3px)',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            borderRadius: '6px',
+                                            padding: '4px 10px',
+                                            color: 'rgba(255, 255, 255, 0.35)',
+                                            fontSize: '0.8rem',
+                                            fontWeight: '600',
+                                            fontFamily: 'monospace',
                                             zIndex: 10,
                                             whiteSpace: 'nowrap',
                                             userSelect: 'none',
-                                            transition: 'all 1s ease-in-out'
+                                            transition: 'all 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                            boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px'
                                         }}>
-                                            {localStorage.getItem('user_profile') ? JSON.parse(localStorage.getItem('user_profile')!).email : 'student@abc.com'} (IP: 127.0.0.1)
+                                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }} />
+                                            <span>
+                                                {userProfile ? `${userProfile.first_name || 'Student'} • ${userProfile.phone || userProfile.email}` : 'Amit Sharma • +91 98765 43210'} 
+                                            </span>
+                                            <span style={{ opacity: 0.6 }}>[{currentTimeStamp}]</span>
                                         </div>
                                     </>
                                 ) : activeMaterial.type === 'pdf' ? (

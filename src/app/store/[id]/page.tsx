@@ -37,6 +37,9 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
     const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
     const [couponError, setCouponError] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [includeOrderBump, setIncludeOrderBump] = useState(false);
+
+    const ORDER_BUMP_PRICE = 199.00;
 
     useEffect(() => {
         fetchCourseAndSyllabus();
@@ -77,13 +80,14 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
     const handleCheckout = async () => {
         setIsProcessing(true);
         try {
-            // 1. Create Checkout Order
+            // 1. Create Checkout Order (including Tagmango order bump if selected)
             const checkoutData = await apiRequest('/api/store/checkout', {
                 method: 'POST',
                 body: JSON.stringify({
                     courseId,
                     couponCode: appliedCoupon ? appliedCoupon.code : undefined,
-                    gateway: 'sandbox'
+                    gateway: 'sandbox',
+                    orderBump: includeOrderBump
                 })
             });
 
@@ -94,7 +98,10 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
                 method: 'POST'
             });
 
-            alert('Checkout transaction complete! You are now enrolled.');
+            const successMsg = includeOrderBump 
+                ? 'Enrollment complete! Course syllabus and VIP Handwritten Formula Booklet have been added to your dashboard.' 
+                : 'Enrollment complete! You now have full access to the course syllabus.';
+            alert(successMsg);
             router.push(`/courses/${courseId}`);
         } catch (err: any) {
             alert(err.message || 'Checkout transaction failed.');
@@ -119,8 +126,10 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
         );
     }
 
-    // Dynamic calculations
-    const basePrice = parseFloat(course.price);
+    // Dynamic calculations including Tagmango order bump
+    const baseCoursePrice = parseFloat(course.price);
+    const bumpFee = includeOrderBump ? ORDER_BUMP_PRICE : 0.00;
+    const basePrice = baseCoursePrice + bumpFee;
     let discountAmount = 0.00;
     if (appliedCoupon) {
         if (appliedCoupon.discount_type === 'percentage') {
@@ -266,12 +275,55 @@ export default function StoreCourseDetailPage({ params }: StoreCourseDetailPageP
                             </div>
                         )}
 
+                        {/* Tagmango 1-Click Order Bump Card */}
+                        <div 
+                            style={{
+                                background: includeOrderBump ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                                border: includeOrderBump ? '1.5px solid #6366f1' : '1px dashed rgba(255, 255, 255, 0.2)',
+                                borderRadius: '12px',
+                                padding: '16px',
+                                transition: 'all 0.2s ease',
+                                cursor: 'pointer',
+                                boxShadow: includeOrderBump ? '0 4px 15px rgba(99, 102, 241, 0.2)' : 'none'
+                            }} 
+                            onClick={() => setIncludeOrderBump(!includeOrderBump)}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                                <input 
+                                    type="checkbox"
+                                    checked={includeOrderBump}
+                                    onChange={(e) => setIncludeOrderBump(e.target.checked)}
+                                    style={{ width: '18px', height: '18px', marginTop: '3px', accentColor: '#6366f1', cursor: 'pointer' }}
+                                />
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                        <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(236, 72, 153, 0.2)', color: '#f472b6', fontWeight: 'bold' }}>
+                                            ⚡ TAGMANGO ORDER BUMP
+                                        </span>
+                                        <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 'bold' }}>Save 67%</span>
+                                    </div>
+                                    <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#f8fafc', marginBottom: '4px' }}>
+                                        Add 2026 Handwritten Formula Booklet & 500+ Practice MCQs
+                                    </div>
+                                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
+                                        High-yield revision cheat-sheets & exam tricks. Instant access for just <strong style={{ color: '#f8fafc' }}>₹199</strong> (Regular ₹599).
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Pricing details table */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '10px', padding: '16px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                <span>Base Price:</span>
-                                <span>₹{basePrice.toLocaleString()}</span>
+                                <span>Course Tuition:</span>
+                                <span>₹{baseCoursePrice.toLocaleString()}</span>
                             </div>
+                            {includeOrderBump && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#a5b4fc', fontWeight: '600' }}>
+                                    <span>VIP Formula Booklet (Bump):</span>
+                                    <span>+₹{ORDER_BUMP_PRICE.toFixed(2)}</span>
+                                </div>
+                            )}
                             {discountAmount > 0 && (
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--success)' }}>
                                     <span>Discount:</span>
