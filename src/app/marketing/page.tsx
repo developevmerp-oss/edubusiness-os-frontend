@@ -6,7 +6,7 @@ import { apiRequest } from '../../utils/api';
 import { 
     Users, AlertCircle, PlayCircle, ShieldCheck, Share2, 
     DollarSign, ShoppingCart, CheckCircle, Smartphone, 
-    ExternalLink, Plus, RefreshCw, Send, Sparkles, MessageCircle
+    ExternalLink, Plus, RefreshCw, Send, Sparkles, MessageCircle, Settings
 } from 'lucide-react';
 
 export default function MarketingCRMPage() {
@@ -37,9 +37,23 @@ export default function MarketingCRMPage() {
     const [newAffRate, setNewAffRate] = useState(15);
     const [newAffUpi, setNewAffUpi] = useState('');
 
-    // Abandoned Carts
+    // Abandoned Carts & WhatsApp Cloud API
     const [abandonedCarts, setAbandonedCarts] = useState<any[]>([]);
     const [sendingNudgeId, setSendingNudgeId] = useState<string | null>(null);
+
+    // Meta WhatsApp Cloud API states
+    const [waProvider, setWaProvider] = useState<'meta_cloud_api' | 'simulator'>('meta_cloud_api');
+    const [waPhoneNumberId, setWaPhoneNumberId] = useState('');
+    const [waWabaId, setWaWabaId] = useState('');
+    const [waAccessToken, setWaAccessToken] = useState('');
+    const [waWebhookVerifyToken, setWaWebhookVerifyToken] = useState('edubusiness_wa_secret_2026');
+    const [waIsEnabled, setWaIsEnabled] = useState(false);
+    const [showWaConfigCard, setShowWaConfigCard] = useState(false);
+    const [showToken, setShowToken] = useState(false);
+    const [waTestPhone, setWaTestPhone] = useState('');
+    const [isTestingWa, setIsTestingWa] = useState(false);
+    const [isSavingWaConfig, setIsSavingWaConfig] = useState(false);
+    const [waMessages, setWaMessages] = useState<any[]>([]);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user_profile');
@@ -71,6 +85,20 @@ export default function MarketingCRMPage() {
             // Abandoned Carts Data
             const cartsData = await apiRequest('/api/marketing/abandoned-carts').catch(() => ({ abandonedCarts: [] }));
             setAbandonedCarts(cartsData.abandonedCarts || []);
+
+            // WhatsApp Cloud API Config & Message Logs
+            const waCfg = await apiRequest('/api/marketing/whatsapp/config').catch(() => null);
+            if (waCfg?.config) {
+                setWaProvider(waCfg.config.provider || 'meta_cloud_api');
+                setWaPhoneNumberId(waCfg.config.phoneNumberId || '');
+                setWaWabaId(waCfg.config.wabaId || '');
+                setWaAccessToken(waCfg.config.accessToken || '');
+                setWaWebhookVerifyToken(waCfg.config.webhookVerifyToken || 'edubusiness_wa_secret_2026');
+                setWaIsEnabled(waCfg.config.isEnabled ?? false);
+            }
+
+            const waMsgs = await apiRequest('/api/marketing/whatsapp/messages').catch(() => ({ messages: [] }));
+            setWaMessages(waMsgs?.messages || []);
         } catch (err: any) {
             setError(err.message || 'Failed to load marketing details.');
         } finally {
@@ -196,6 +224,54 @@ export default function MarketingCRMPage() {
         navigator.clipboard.writeText(url);
         setSuccessMessage(`Affiliate referral link copied: ${url}`);
         setTimeout(() => setSuccessMessage(''), 4000);
+    };
+
+    // Save WhatsApp Cloud API Configuration
+    const handleSaveWaConfig = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSavingWaConfig(true);
+        try {
+            await apiRequest('/api/marketing/whatsapp/config', {
+                method: 'POST',
+                body: JSON.stringify({
+                    provider: waProvider,
+                    phoneNumberId: waPhoneNumberId,
+                    wabaId: waWabaId,
+                    accessToken: waAccessToken,
+                    webhookVerifyToken: waWebhookVerifyToken,
+                    isEnabled: waIsEnabled
+                })
+            });
+            setSuccessMessage('Meta WhatsApp Cloud API settings saved successfully!');
+            fetchAllData();
+            setTimeout(() => setSuccessMessage(''), 4000);
+        } catch (err: any) {
+            alert(err.message || 'Failed to save WhatsApp settings.');
+        } finally {
+            setIsSavingWaConfig(false);
+        }
+    };
+
+    // Dispatch Live Test WhatsApp Message
+    const handleSendTestWaMessage = async () => {
+        if (!waTestPhone) {
+            alert('Please enter a destination phone number (e.g. +919876543210)');
+            return;
+        }
+        setIsTestingWa(true);
+        try {
+            const res = await apiRequest('/api/marketing/whatsapp/test-message', {
+                method: 'POST',
+                body: JSON.stringify({ testPhone: waTestPhone })
+            });
+            setSuccessMessage(res.message || 'Test message transmitted successfully!');
+            fetchAllData();
+            setTimeout(() => setSuccessMessage(''), 5000);
+        } catch (err: any) {
+            alert(err.message || 'Test message dispatch failed.');
+        } finally {
+            setIsTestingWa(false);
+        }
     };
 
     // Metrics Calculations
@@ -787,6 +863,207 @@ export default function MarketingCRMPage() {
                    ======================================================== */}
                 {activeTab === 'abandoned' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                        {/* Meta WhatsApp Cloud API Integration Settings Card */}
+                        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+                                <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                                        <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(37, 211, 102, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <MessageCircle size={20} style={{ color: '#25D366' }} />
+                                        </div>
+                                        <div>
+                                            <h3 style={{ fontSize: '1.25rem', fontWeight: '800' }}>Meta WhatsApp Cloud API Gateway</h3>
+                                            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                                                Connect Meta Graph API to dispatch real, high-priority WhatsApp messages directly to student devices.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <span style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        padding: '6px 12px',
+                                        borderRadius: '8px',
+                                        fontSize: '0.78rem',
+                                        fontWeight: '700',
+                                        background: waIsEnabled ? 'rgba(37, 211, 102, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                        color: waIsEnabled ? '#25D366' : '#fbbf24',
+                                        border: `1px solid ${waIsEnabled ? 'rgba(37, 211, 102, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
+                                    }}>
+                                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: waIsEnabled ? '#25D366' : '#fbbf24' }}></span>
+                                        {waIsEnabled ? 'Live Meta Cloud API Active' : 'Simulator Mode Active'}
+                                    </span>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setShowWaConfigCard(!showWaConfigCard)}
+                                        className="btn-secondary"
+                                        style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                    >
+                                        <Settings size={14} /> {showWaConfigCard ? 'Hide API Setup' : 'Configure API'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {showWaConfigCard && (
+                                <form onSubmit={handleSaveWaConfig} style={{ display: 'flex', flexDirection: 'column', gap: '18px', paddingTop: '10px', borderTop: '1px solid var(--border-glass)' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                                                Dispatch Gateway Provider
+                                            </label>
+                                            <select 
+                                                value={waProvider} 
+                                                onChange={e => setWaProvider(e.target.value as any)}
+                                                className="glass-input"
+                                            >
+                                                <option value="meta_cloud_api">Meta WhatsApp Cloud API (Official Graph API)</option>
+                                                <option value="simulator">Built-in Interactive Simulator (Test Mode)</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                                                Phone Number ID (from Meta Developer Console)
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                className="glass-input" 
+                                                placeholder="e.g. 108923485739281" 
+                                                value={waPhoneNumberId}
+                                                onChange={e => setWaPhoneNumberId(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                                                WhatsApp Business Account ID (WABA ID)
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                className="glass-input" 
+                                                placeholder="e.g. 102938475610293" 
+                                                value={waWabaId}
+                                                onChange={e => setWaWabaId(e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                                                Webhook Verify Token
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                className="glass-input" 
+                                                placeholder="edubusiness_wa_secret_2026" 
+                                                value={waWebhookVerifyToken}
+                                                onChange={e => setWaWebhookVerifyToken(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                            <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                                                Permanent System User Access Token
+                                            </label>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setShowToken(!showToken)}
+                                                style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '0.75rem', cursor: 'pointer' }}
+                                            >
+                                                {showToken ? 'Hide Secret' : 'Show Token'}
+                                            </button>
+                                        </div>
+                                        <input 
+                                            type={showToken ? 'text' : 'password'}
+                                            className="glass-input" 
+                                            placeholder="EAA..." 
+                                            value={waAccessToken}
+                                            onChange={e => setWaAccessToken(e.target.value)}
+                                        />
+                                        <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>
+                                            Generate from Meta Business Suite &gt; System Users &gt; Generate Token with <code>whatsapp_business_messaging</code> permission.
+                                        </span>
+                                    </div>
+
+                                    {/* Inbound Webhook Listener URL */}
+                                    <div style={{ padding: '14px', background: 'rgba(0,0,0,0.3)', borderRadius: '10px', border: '1px solid var(--border-glass)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: '600' }}>
+                                            Meta Developer Webhook Callback URL:
+                                        </span>
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                            <code style={{ flex: 1, background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', color: '#6ee7b7', wordBreak: 'break-all' }}>
+                                                {typeof window !== 'undefined' ? `${window.location.origin.replace(':3000', ':5000')}/api/marketing/whatsapp/webhook` : 'https://api.domain/api/marketing/whatsapp/webhook'}
+                                            </code>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const origin = typeof window !== 'undefined' ? `${window.location.origin.replace(':3000', ':5000')}/api/marketing/whatsapp/webhook` : '';
+                                                    navigator.clipboard.writeText(origin);
+                                                    setSuccessMessage('Webhook Callback URL copied to clipboard!');
+                                                    setTimeout(() => setSuccessMessage(''), 3000);
+                                                }}
+                                                className="btn-secondary"
+                                                style={{ padding: '6px 12px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                                            >
+                                                Copy URL
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Test Message Box & Save */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', paddingTop: '10px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <input 
+                                                type="checkbox"
+                                                id="waEnabled"
+                                                checked={waIsEnabled}
+                                                onChange={e => setWaIsEnabled(e.target.checked)}
+                                                style={{ width: '18px', height: '18px', accentColor: '#25D366', cursor: 'pointer' }}
+                                            />
+                                            <label htmlFor="waEnabled" style={{ fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer' }}>
+                                                Enable Live Meta Cloud API Message Dispatch
+                                            </label>
+                                        </div>
+
+                                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                            <div style={{ display: 'flex', gap: '6px' }}>
+                                                <input 
+                                                    type="text" 
+                                                    className="glass-input" 
+                                                    placeholder="+919876543210" 
+                                                    value={waTestPhone}
+                                                    onChange={e => setWaTestPhone(e.target.value)}
+                                                    style={{ width: '160px', padding: '6px 10px', fontSize: '0.8rem' }}
+                                                />
+                                                <button 
+                                                    type="button" 
+                                                    onClick={handleSendTestWaMessage}
+                                                    disabled={isTestingWa}
+                                                    className="btn-secondary"
+                                                    style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px', borderColor: '#25D366', color: '#25D366' }}
+                                                >
+                                                    <Send size={12} /> {isTestingWa ? 'Testing...' : 'Test Send'}
+                                                </button>
+                                            </div>
+
+                                            <button 
+                                                type="submit" 
+                                                className="btn-primary" 
+                                                disabled={isSavingWaConfig}
+                                                style={{ padding: '8px 20px', fontSize: '0.85rem' }}
+                                            >
+                                                {isSavingWaConfig ? 'Saving...' : 'Save Settings'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            )}
+                        </div>
+
                         {/* Metric Highlights */}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
                             <div className="glass-panel" style={{ padding: '20px' }}>
@@ -953,6 +1230,88 @@ export default function MarketingCRMPage() {
                                 </div>
 
                             </div>
+                        </div>
+
+                        {/* Live WhatsApp Transmission Log Table */}
+                        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ fontSize: '1.1rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <MessageCircle size={18} style={{ color: '#25D366' }} /> WhatsApp Transmission & Webhook Logs
+                                </h3>
+                                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Real-time Delivery Audits</span>
+                            </div>
+
+                            {waMessages.length === 0 ? (
+                                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
+                                    No WhatsApp transmissions logged yet. Use "Test Send" above or dispatch a recovery nudge to view live delivery logs.
+                                </div>
+                            ) : (
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '1px solid var(--border-glass)' }}>
+                                                <th style={{ padding: '10px', color: 'var(--text-muted)' }}>Recipient</th>
+                                                <th style={{ padding: '10px', color: 'var(--text-muted)' }}>Direction</th>
+                                                <th style={{ padding: '10px', color: 'var(--text-muted)' }}>Template</th>
+                                                <th style={{ padding: '10px', color: 'var(--text-muted)' }}>Status</th>
+                                                <th style={{ padding: '10px', color: 'var(--text-muted)' }}>Meta Message ID</th>
+                                                <th style={{ padding: '10px', color: 'var(--text-muted)' }}>Time</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {waMessages.map(msg => (
+                                                <tr key={msg.id} style={{ borderBottom: '1px solid var(--border-glass)' }}>
+                                                    <td style={{ padding: '10px' }}>
+                                                        <div style={{ fontWeight: '600' }}>{msg.recipient_name || 'Student'}</div>
+                                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{msg.recipient_phone}</div>
+                                                    </td>
+                                                    <td style={{ padding: '10px' }}>
+                                                        <span style={{
+                                                            fontSize: '0.72rem',
+                                                            padding: '2px 6px',
+                                                            borderRadius: '4px',
+                                                            background: msg.direction === 'inbound' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(99, 102, 241, 0.15)',
+                                                            color: msg.direction === 'inbound' ? '#38bdf8' : 'var(--primary)',
+                                                            fontWeight: '600'
+                                                        }}>
+                                                            {msg.direction === 'inbound' ? '⬇ Inbound Reply' : '⬆ Outbound'}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '10px', color: 'var(--text-secondary)' }}>
+                                                        {msg.template_name}
+                                                    </td>
+                                                    <td style={{ padding: '10px' }}>
+                                                        <span style={{
+                                                            fontSize: '0.72rem',
+                                                            padding: '2px 8px',
+                                                            borderRadius: '6px',
+                                                            fontWeight: '600',
+                                                            background: msg.status === 'delivered' || msg.status === 'read' || msg.status === 'sent'
+                                                                ? 'rgba(34, 197, 94, 0.15)'
+                                                                : msg.status === 'simulated'
+                                                                ? 'rgba(245, 158, 11, 0.15)'
+                                                                : 'rgba(239, 68, 68, 0.15)',
+                                                            color: msg.status === 'delivered' || msg.status === 'read' || msg.status === 'sent'
+                                                                ? '#22c55e'
+                                                                : msg.status === 'simulated'
+                                                                ? '#fbbf24'
+                                                                : '#ef4444'
+                                                        }}>
+                                                            {msg.status.toUpperCase()}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '10px', fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                        {msg.meta_message_id ? `${msg.meta_message_id.slice(0, 16)}...` : '— (simulated)'}
+                                                    </td>
+                                                    <td style={{ padding: '10px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                         </div>
 
                     </div>
