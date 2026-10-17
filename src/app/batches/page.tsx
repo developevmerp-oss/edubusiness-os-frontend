@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import SidebarLayout from '../../components/SidebarLayout';
+import ModalPortal from '../../components/ModalPortal';
 import { apiRequest } from '../../utils/api';
-import { Calendar, Plus, Users, UserPlus, FileText, X, Video } from 'lucide-react';
+import { Calendar, Plus, Users, UserPlus, FileText, X, Video, Edit2, Trash2, CheckCircle, Clock } from 'lucide-react';
 
 export default function BatchesPage() {
     const [batches, setBatches] = useState<any[]>([]);
@@ -26,6 +27,23 @@ export default function BatchesPage() {
     const [scheduleSlots, setScheduleSlots] = useState<any[]>([
         { day: 'Monday', startTime: '09:00', endTime: '10:00' }
     ]);
+
+    // Batch Edit fields
+    const [editingBatch, setEditingBatch] = useState<any>(null);
+    const [editName, setEditName] = useState('');
+    const [editCourseId, setEditCourseId] = useState('');
+    const [editTeacherId, setEditTeacherId] = useState('');
+    const [editFees, setEditFees] = useState('');
+    const [editCapacity, setEditCapacity] = useState('');
+    const [editStartDate, setEditStartDate] = useState('');
+    const [editEndDate, setEditEndDate] = useState('');
+    const [editScheduleSlots, setEditScheduleSlots] = useState<any[]>([]);
+
+    // Batch Attendance state
+    const [activeBatchForAttendance, setActiveBatchForAttendance] = useState<any>(null);
+    const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
+    const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+    const [savingAttendance, setSavingAttendance] = useState(false);
 
     // Batch Student enrollment state
     const [activeBatchForEnroll, setActiveBatchForEnroll] = useState<any>(null);
@@ -108,6 +126,102 @@ export default function BatchesPage() {
             fetchBatchesAndDropdowns();
         } catch (err: any) {
             setError(err.message || 'Failed to create batch.');
+        }
+    };
+
+    const openEditBatch = (batch: any) => {
+        setEditingBatch(batch);
+        setEditName(batch.name);
+        setEditCourseId(batch.course_id);
+        setEditTeacherId(batch.teacher_id || '');
+        setEditFees(String(batch.fees || ''));
+        setEditCapacity(batch.capacity ? String(batch.capacity) : '');
+        setEditStartDate(batch.start_date ? batch.start_date.split('T')[0] : '');
+        setEditEndDate(batch.end_date ? batch.end_date.split('T')[0] : '');
+        const scheduleList = typeof batch.schedule === 'string' ? JSON.parse(batch.schedule) : batch.schedule;
+        setEditScheduleSlots(Array.isArray(scheduleList) && scheduleList.length > 0 ? scheduleList : [{ day: 'Monday', startTime: '09:00', endTime: '10:00' }]);
+    };
+
+    const handleUpdateBatch = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await apiRequest(`/api/batches/${editingBatch.id}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    name: editName,
+                    courseId: editCourseId,
+                    teacherId: editTeacherId || null,
+                    fees: parseFloat(editFees) || 0,
+                    capacity: editCapacity ? parseInt(editCapacity) : null,
+                    startDate: editStartDate || null,
+                    endDate: editEndDate || null,
+                    schedule: editScheduleSlots
+                })
+            });
+            setEditingBatch(null);
+            fetchBatchesAndDropdowns();
+        } catch (err: any) {
+            alert(err.message || 'Failed to update batch.');
+        }
+    };
+
+    const handleDeleteBatch = async (batchId: string, batchName: string) => {
+        if (!confirm(`Are you sure you want to delete batch "${batchName}"? All schedules, classes, and enrollments in it will be removed.`)) return;
+        try {
+            await apiRequest(`/api/batches/${batchId}`, { method: 'DELETE' });
+            fetchBatchesAndDropdowns();
+        } catch (err: any) {
+            alert(err.message || 'Failed to delete batch.');
+        }
+    };
+
+    const handleOpenAttendance = async (batch: any) => {
+        try {
+            setActiveBatchForAttendance(batch);
+            const data = await apiRequest(`/api/attendance/batch/${batch.id}?date=${attendanceDate}`);
+            setAttendanceRecords(data.attendance.map((att: any) => ({
+                studentId: att.student_id,
+                name: `${att.first_name} ${att.last_name}`,
+                status: att.status || 'present',
+                remarks: att.remarks || ''
+            })));
+        } catch (err: any) {
+            alert(err.message || 'Failed to load attendance list.');
+        }
+    };
+
+    const handleDateChangeAttendance = async (newDate: string) => {
+        setAttendanceDate(newDate);
+        if (!activeBatchForAttendance) return;
+        try {
+            const data = await apiRequest(`/api/attendance/batch/${activeBatchForAttendance.id}?date=${newDate}`);
+            setAttendanceRecords(data.attendance.map((att: any) => ({
+                studentId: att.student_id,
+                name: `${att.first_name} ${att.last_name}`,
+                status: att.status || 'present',
+                remarks: att.remarks || ''
+            })));
+        } catch (err: any) {}
+    };
+
+    const handleSaveAttendance = async () => {
+        if (!activeBatchForAttendance) return;
+        setSavingAttendance(true);
+        try {
+            await apiRequest('/api/attendance', {
+                method: 'POST',
+                body: JSON.stringify({
+                    batchId: activeBatchForAttendance.id,
+                    date: attendanceDate,
+                    records: attendanceRecords
+                })
+            });
+            alert('Attendance records saved successfully.');
+            setActiveBatchForAttendance(null);
+        } catch (err: any) {
+            alert(err.message || 'Failed to submit attendance.');
+        } finally {
+            setSavingAttendance(false);
         }
     };
 
@@ -262,7 +376,27 @@ export default function BatchesPage() {
                             return (
                                 <div key={batch.id} className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '260px' }}>
                                     <div>
-                                        <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '4px' }}>{batch.name}</h3>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                                            <h3 style={{ fontSize: '1.25rem', fontWeight: '700' }}>{batch.name}</h3>
+                                            {userRole === 'admin' && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <button 
+                                                        onClick={() => openEditBatch(batch)}
+                                                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                                                        title="Edit Batch"
+                                                    >
+                                                        <Edit2 size={15} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleDeleteBatch(batch.id, batch.name)}
+                                                        style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', padding: '4px' }}
+                                                        title="Delete Batch"
+                                                    >
+                                                        <Trash2 size={15} />
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                         <span style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: '600', display: 'block', marginBottom: '16px' }}>
                                             {batch.course_title}
                                         </span>
@@ -296,24 +430,35 @@ export default function BatchesPage() {
                                     </div>
 
                                     {/* Action footer */}
-                                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '16px', display: 'flex', gap: '12px' }}>
+                                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        {(userRole === 'admin' || userRole === 'teacher') && (
+                                            <button 
+                                                onClick={() => handleOpenAttendance(batch)}
+                                                className="btn-secondary" 
+                                                style={{ flex: 1, padding: '8px 10px', fontSize: '0.8rem', minWidth: '95px' }}
+                                                title="Mark Batch Attendance"
+                                            >
+                                                <CheckCircle size={13} />
+                                                Attendance
+                                            </button>
+                                        )}
                                         {userRole === 'admin' && (
                                             <button 
                                                 onClick={() => handleLoadEnrollments(batch)}
                                                 className="btn-secondary" 
-                                                style={{ flex: 1, padding: '8px 12px', fontSize: '0.82rem' }}
+                                                style={{ flex: 1, padding: '8px 10px', fontSize: '0.8rem', minWidth: '95px' }}
                                             >
-                                                <UserPlus size={14} />
-                                                Enrollment
+                                                <UserPlus size={13} />
+                                                Enroll
                                             </button>
                                         )}
                                         <button 
                                             onClick={() => handleLoadLiveClasses(batch)}
                                             className="btn-primary" 
-                                            style={{ flex: 1, padding: '8px 12px', fontSize: '0.82rem' }}
+                                            style={{ flex: 1, padding: '8px 10px', fontSize: '0.8rem', minWidth: '95px' }}
                                         >
-                                            <Video size={14} />
-                                            Live Lectures
+                                            <Video size={13} />
+                                            Live
                                         </button>
                                     </div>
                                 </div>
@@ -645,6 +790,210 @@ export default function BatchesPage() {
                             </div>
                         </div>
                     </div>
+                )}
+
+                {/* Edit Batch Modal */}
+                {editingBatch && (
+                    <ModalPortal onClose={() => setEditingBatch(null)}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Edit Batch Details</h3>
+                                <button style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => setEditingBatch(null)}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            
+                            <form onSubmit={handleUpdateBatch} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Batch Name</label>
+                                    <input 
+                                        type="text" 
+                                        className="glass-input" 
+                                        required 
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                        placeholder="Batch Name"
+                                    />
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Course</label>
+                                        <select 
+                                            className="glass-input" 
+                                            required 
+                                            value={editCourseId}
+                                            onChange={(e) => setEditCourseId(e.target.value)}
+                                        >
+                                            <option value="">Select Course</option>
+                                            {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Teacher</label>
+                                        <select 
+                                            className="glass-input" 
+                                            value={editTeacherId}
+                                            onChange={(e) => setEditTeacherId(e.target.value)}
+                                        >
+                                            <option value="">Unassigned</option>
+                                            {teachers.map(t => <option key={t.id} value={t.id}>{t.first_name} {t.last_name}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Fees (₹)</label>
+                                        <input 
+                                            type="number" 
+                                            className="glass-input" 
+                                            required 
+                                            value={editFees}
+                                            onChange={(e) => setEditFees(e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Capacity</label>
+                                        <input 
+                                            type="number" 
+                                            className="glass-input" 
+                                            value={editCapacity}
+                                            onChange={(e) => setEditCapacity(e.target.value)}
+                                            placeholder="Max students"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Start Date</label>
+                                        <input 
+                                            type="date" 
+                                            className="glass-input" 
+                                            value={editStartDate}
+                                            onChange={(e) => setEditStartDate(e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>End Date</label>
+                                        <input 
+                                            type="date" 
+                                            className="glass-input" 
+                                            value={editEndDate}
+                                            onChange={(e) => setEditEndDate(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                                    <button type="submit" className="btn-primary" style={{ flex: 1, padding: '12px' }}>Save Changes</button>
+                                    <button type="button" className="btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={() => setEditingBatch(null)}>Cancel</button>
+                                </div>
+                            </form>
+                        </div>
+                    </ModalPortal>
+                )}
+
+                {/* Quick Attendance Modal */}
+                {activeBatchForAttendance && (
+                    <ModalPortal onClose={() => setActiveBatchForAttendance(null)}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <h3 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Mark Batch Attendance</h3>
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Batch: {activeBatchForAttendance.name}</span>
+                                </div>
+                                <button style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => setActiveBatchForAttendance(null)}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Attendance Date:</label>
+                                <input 
+                                    type="date" 
+                                    className="glass-input" 
+                                    style={{ width: 'auto' }}
+                                    value={attendanceDate}
+                                    onChange={(e) => handleDateChangeAttendance(e.target.value)}
+                                />
+                            </div>
+
+                            {/* Student attendance list */}
+                            <div style={{ maxHeight: '350px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {attendanceRecords.length === 0 ? (
+                                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>
+                                        No students enrolled in this batch yet.
+                                    </div>
+                                ) : (
+                                    attendanceRecords.map((rec, idx) => (
+                                        <div key={rec.studentId} style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            padding: '10px 14px',
+                                            background: 'rgba(255,255,255,0.02)',
+                                            border: '1px solid var(--border-glass)',
+                                            borderRadius: '8px'
+                                        }}>
+                                            <span style={{ fontSize: '0.9rem', fontWeight: '600' }}>{rec.name}</span>
+                                            <div style={{ display: 'flex', gap: '6px' }}>
+                                                {(['present', 'absent', 'late'] as const).map(statusOpt => (
+                                                    <button
+                                                        key={statusOpt}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const copy = [...attendanceRecords];
+                                                            copy[idx].status = statusOpt;
+                                                            setAttendanceRecords(copy);
+                                                        }}
+                                                        style={{
+                                                            padding: '4px 10px',
+                                                            borderRadius: '6px',
+                                                            border: 'none',
+                                                            fontSize: '0.78rem',
+                                                            fontWeight: '600',
+                                                            cursor: 'pointer',
+                                                            textTransform: 'capitalize',
+                                                            background: rec.status === statusOpt
+                                                                ? statusOpt === 'present' ? 'rgba(16, 185, 129, 0.25)' : statusOpt === 'absent' ? 'rgba(239, 68, 68, 0.25)' : 'rgba(245, 158, 11, 0.25)'
+                                                                : 'rgba(255,255,255,0.05)',
+                                                            color: rec.status === statusOpt
+                                                                ? statusOpt === 'present' ? '#34d399' : statusOpt === 'absent' ? '#f87171' : '#fbbf24'
+                                                                : 'var(--text-muted)'
+                                                        }}
+                                                    >
+                                                        {statusOpt}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                                <button 
+                                    type="button" 
+                                    className="btn-primary" 
+                                    style={{ flex: 1, padding: '12px' }} 
+                                    disabled={savingAttendance || attendanceRecords.length === 0}
+                                    onClick={handleSaveAttendance}
+                                >
+                                    {savingAttendance ? 'Saving...' : 'Save Attendance Records'}
+                                </button>
+                                <button 
+                                    type="button" 
+                                    className="btn-secondary" 
+                                    style={{ flex: 1, padding: '12px' }} 
+                                    onClick={() => setActiveBatchForAttendance(null)}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </ModalPortal>
                 )}
             </div>
         </SidebarLayout>

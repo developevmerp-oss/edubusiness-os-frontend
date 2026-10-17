@@ -85,6 +85,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
         { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'teacher', 'student', 'parent'] },
         { name: 'Courses', path: '/courses', icon: BookOpen, roles: ['admin', 'teacher', 'student', 'parent'] },
         { name: 'Batches', path: '/batches', icon: Calendar, roles: ['admin', 'teacher', 'student', 'parent'] },
+        { name: 'Fees', path: '/fees', icon: CreditCard, roles: ['admin', 'student', 'parent'] },
         { name: 'Users', path: '/users', icon: Users, roles: ['admin'] },
         { name: 'Exams', path: '/exams', icon: FileText, roles: ['admin', 'teacher', 'student', 'parent'] },
         { name: 'Assignments', path: '/assignments', icon: ClipboardList, roles: ['admin', 'teacher', 'student'] },

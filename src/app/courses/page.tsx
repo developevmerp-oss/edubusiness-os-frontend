@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import SidebarLayout from '../../components/SidebarLayout';
 import ModalPortal from '../../components/ModalPortal';
 import { apiRequest } from '../../utils/api';
-import { BookOpen, Plus, Globe, Check, EyeOff, Sparkles, X } from 'lucide-react';
+import { BookOpen, Plus, Globe, Check, EyeOff, Sparkles, X, Edit2, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CoursesPage() {
@@ -19,6 +19,13 @@ export default function CoursesPage() {
     const [description, setDescription] = useState('');
     const [price, setPrice] = useState('');
     const [isPublished, setIsPublished] = useState(true);
+
+    // Course Edit fields
+    const [editingCourse, setEditingCourse] = useState<any>(null);
+    const [editTitle, setEditTitle] = useState('');
+    const [editDescription, setEditDescription] = useState('');
+    const [editPrice, setEditPrice] = useState('');
+    const [editIsPublished, setEditIsPublished] = useState(true);
 
     useEffect(() => {
         fetchCourses();
@@ -50,6 +57,43 @@ export default function CoursesPage() {
             fetchCourses();
         } catch (err: any) {
             alert(err.message || 'Failed to update course publish status.');
+        }
+    };
+
+    const openEditCourse = (course: any) => {
+        setEditingCourse(course);
+        setEditTitle(course.title);
+        setEditDescription(course.description || '');
+        setEditPrice(String(course.price || ''));
+        setEditIsPublished(course.is_published ?? true);
+    };
+
+    const handleUpdateCourse = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await apiRequest(`/api/courses/${editingCourse.id}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    title: editTitle,
+                    description: editDescription,
+                    price: parseFloat(editPrice) || 0,
+                    isPublished: editIsPublished
+                })
+            });
+            setEditingCourse(null);
+            fetchCourses();
+        } catch (err: any) {
+            alert(err.message || 'Failed to update course.');
+        }
+    };
+
+    const handleDeleteCourse = async (courseId: string, courseTitle: string) => {
+        if (!confirm(`Are you sure you want to delete "${courseTitle}"? This cannot be undone.`)) return;
+        try {
+            await apiRequest(`/api/courses/${courseId}`, { method: 'DELETE' });
+            fetchCourses();
+        } catch (err: any) {
+            alert(err.message || 'Failed to delete course.');
         }
     };
 
@@ -201,6 +245,80 @@ export default function CoursesPage() {
                     </ModalPortal>
                 )}
 
+                {/* Course Edit modal */}
+                {editingCourse && (
+                    <ModalPortal onClose={() => setEditingCourse(null)}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Edit Course</h3>
+                                <button style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => setEditingCourse(null)}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            
+                            <form onSubmit={handleUpdateCourse} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Course Title</label>
+                                    <input 
+                                        type="text" 
+                                        className="glass-input" 
+                                        required 
+                                        value={editTitle}
+                                        onChange={(e) => setEditTitle(e.target.value)}
+                                        placeholder="Course Title"
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Description</label>
+                                    <textarea 
+                                        className="glass-input" 
+                                        rows={3}
+                                        value={editDescription}
+                                        onChange={(e) => setEditDescription(e.target.value)}
+                                        placeholder="Outline course benefits, sections..."
+                                        style={{ resize: 'vertical', fontFamily: 'inherit' }}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Price (₹)</label>
+                                    <input 
+                                        type="number" 
+                                        className="glass-input" 
+                                        required 
+                                        value={editPrice}
+                                        onChange={(e) => setEditPrice(e.target.value)}
+                                        placeholder="e.g. 1999"
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        id="editPublish" 
+                                        checked={editIsPublished}
+                                        onChange={(e) => setEditIsPublished(e.target.checked)}
+                                        style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                                    />
+                                    <label htmlFor="editPublish" style={{ fontSize: '0.9rem', color: 'var(--text-primary)', cursor: 'pointer' }}>
+                                        Published on Storefront
+                                    </label>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                                    <button type="submit" className="btn-primary" style={{ flex: 1, padding: '12px' }}>Save Changes</button>
+                                    <button 
+                                        type="button" 
+                                        className="btn-secondary" 
+                                        style={{ flex: 1, padding: '12px' }} 
+                                        onClick={() => setEditingCourse(null)}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </ModalPortal>
+                )}
+
                 {/* Courses Grid */}
                 {courses.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
@@ -223,24 +341,44 @@ export default function CoursesPage() {
                                         <h3 style={{ fontSize: '1.2rem', fontWeight: '700', wordBreak: 'break-word' }}>
                                             {course.title}
                                         </h3>
-                                        {(userRole === 'admin' || userRole === 'teacher') && (
-                                            <span style={{
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: '4px',
-                                                fontSize: '0.75rem',
-                                                fontWeight: '600',
-                                                padding: '3px 8px',
-                                                borderRadius: '12px',
-                                                background: course.is_published ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                                                color: course.is_published ? 'var(--success)' : 'var(--warning)',
-                                                border: course.is_published ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
-                                                whiteSpace: 'nowrap'
-                                            }}>
-                                                {course.is_published ? <Globe size={12} /> : <EyeOff size={12} />}
-                                                {course.is_published ? 'Published' : 'Draft'}
-                                            </span>
-                                        )}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            {(userRole === 'admin' || userRole === 'teacher') && (
+                                                <>
+                                                    <span style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: '600',
+                                                        padding: '3px 8px',
+                                                        borderRadius: '12px',
+                                                        background: course.is_published ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                                        color: course.is_published ? 'var(--success)' : 'var(--warning)',
+                                                        border: course.is_published ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+                                                        whiteSpace: 'nowrap'
+                                                    }}>
+                                                        {course.is_published ? <Globe size={12} /> : <EyeOff size={12} />}
+                                                        {course.is_published ? 'Published' : 'Draft'}
+                                                    </span>
+                                                    <button
+                                                        onClick={() => openEditCourse(course)}
+                                                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                                                        title="Edit Course"
+                                                    >
+                                                        <Edit2 size={15} />
+                                                    </button>
+                                                    {userRole === 'admin' && (
+                                                        <button
+                                                            onClick={() => handleDeleteCourse(course.id, course.title)}
+                                                            style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', padding: '4px' }}
+                                                            title="Delete Course"
+                                                        >
+                                                            <Trash2 size={15} />
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
                                     <p style={{
                                         fontSize: '0.88rem',

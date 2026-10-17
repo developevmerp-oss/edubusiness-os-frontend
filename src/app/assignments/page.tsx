@@ -15,7 +15,10 @@ import {
     Calendar,
     Check,
     Send,
-    Users
+    Users,
+    Edit2,
+    Trash2,
+    X
 } from 'lucide-react';
 
 export default function AssignmentsPage() {
@@ -41,6 +44,15 @@ export default function AssignmentsPage() {
     const [createTotalMarks, setCreateTotalMarks] = useState(100);
     const [createAttachment, setCreateAttachment] = useState('');
     const [isCreating, setIsCreating] = useState(false);
+
+    // Form: Edit Assignment
+    const [editingAssignment, setEditingAssignment] = useState<any>(null);
+    const [editTitle, setEditTitle] = useState('');
+    const [editDescription, setEditDescription] = useState('');
+    const [editDueDate, setEditDueDate] = useState('');
+    const [editTotalMarks, setEditTotalMarks] = useState(100);
+    const [editAttachment, setEditAttachment] = useState('');
+    const [isUpdating, setIsUpdating] = useState(false);
 
     // Form: Student Submit
     const [submissionContent, setSubmissionContent] = useState('');
@@ -112,6 +124,49 @@ export default function AssignmentsPage() {
             alert(err.message || 'Failed to create assignment.');
         } finally {
             setIsCreating(false);
+        }
+    };
+
+    const openEditAssignment = (assign: any) => {
+        setEditingAssignment(assign);
+        setEditTitle(assign.title);
+        setEditDescription(assign.description);
+        setEditDueDate(assign.due_date ? new Date(assign.due_date).toISOString().slice(0, 16) : '');
+        setEditTotalMarks(parseFloat(assign.total_marks) || 100);
+        setEditAttachment(assign.attachment_url || '');
+    };
+
+    const handleUpdateAssignment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsUpdating(true);
+        try {
+            await apiRequest(`/api/assignments/${editingAssignment.id}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    title: editTitle,
+                    description: editDescription,
+                    dueDate: new Date(editDueDate).toISOString(),
+                    totalMarks: Number(editTotalMarks),
+                    attachmentUrl: editAttachment || undefined
+                })
+            });
+            setEditingAssignment(null);
+            fetchAssignmentsAndMeta();
+            alert('Assignment updated successfully!');
+        } catch (err: any) {
+            alert(err.message || 'Failed to update assignment.');
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
+    const handleDeleteAssignment = async (assignId: string, assignTitle: string) => {
+        if (!confirm(`Are you sure you want to delete assignment "${assignTitle}"? All student homework submissions will also be removed.`)) return;
+        try {
+            await apiRequest(`/api/assignments/${assignId}`, { method: 'DELETE' });
+            fetchAssignmentsAndMeta();
+        } catch (err: any) {
+            alert(err.message || 'Failed to delete assignment.');
         }
     };
 
@@ -256,9 +311,29 @@ export default function AssignmentsPage() {
                                             </span>
                                         </div>
 
-                                        <h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '8px', color: '#f8fafc' }}>
-                                            {assign.title}
-                                        </h3>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                                            <h3 style={{ fontSize: '1.2rem', fontWeight: '700', color: '#f8fafc' }}>
+                                                {assign.title}
+                                            </h3>
+                                            {(userRole === 'admin' || userRole === 'teacher') && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <button
+                                                        onClick={() => openEditAssignment(assign)}
+                                                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                                                        title="Edit Assignment"
+                                                    >
+                                                        <Edit2 size={15} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteAssignment(assign.id, assign.title)}
+                                                        style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', padding: '4px' }}
+                                                        title="Delete Assignment"
+                                                    >
+                                                        <Trash2 size={15} />
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
 
                                         <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: '1.5', marginBottom: '14px' }}>
                                             {assign.description}
@@ -439,6 +514,93 @@ export default function AssignmentsPage() {
                                     {isCreating ? 'Publishing...' : 'Publish to Students'}
                                 </button>
                                 <button type="button" onClick={() => setIsCreateModalOpen(false)} className="btn-secondary" style={{ flex: 1, padding: '12px' }}>
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </ModalPortal>
+            )}
+
+            {/* Modal: Edit Assignment (Teacher/Admin) */}
+            {editingAssignment && (
+                <ModalPortal onClose={() => setEditingAssignment(null)}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#f8fafc', marginBottom: '4px' }}>
+                                Edit Homework Assignment
+                            </h3>
+                            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                Modify assignment instructions, due date, or maximum marks.
+                            </p>
+                        </div>
+
+                        <form onSubmit={handleUpdateAssignment} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Assignment Title</label>
+                                <input 
+                                    type="text"
+                                    className="glass-input"
+                                    required
+                                    value={editTitle}
+                                    onChange={(e) => setEditTitle(e.target.value)}
+                                    placeholder="Title"
+                                />
+                            </div>
+
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Instructions & Task Details</label>
+                                <textarea 
+                                    className="glass-input"
+                                    rows={4}
+                                    required
+                                    value={editDescription}
+                                    onChange={(e) => setEditDescription(e.target.value)}
+                                    placeholder="Instructions..."
+                                />
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Due Date</label>
+                                    <input 
+                                        type="datetime-local"
+                                        className="glass-input"
+                                        required
+                                        value={editDueDate}
+                                        onChange={(e) => setEditDueDate(e.target.value)}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Total Marks</label>
+                                    <input 
+                                        type="number"
+                                        className="glass-input"
+                                        required
+                                        min={1}
+                                        value={editTotalMarks}
+                                        onChange={(e) => setEditTotalMarks(Number(e.target.value))}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Attachment / Reference URL</label>
+                                <input 
+                                    type="url"
+                                    className="glass-input"
+                                    placeholder="https://..."
+                                    value={editAttachment}
+                                    onChange={(e) => setEditAttachment(e.target.value)}
+                                />
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '12px' }} disabled={isUpdating}>
+                                    {isUpdating ? 'Saving...' : 'Save Changes'}
+                                </button>
+                                <button type="button" onClick={() => setEditingAssignment(null)} className="btn-secondary" style={{ flex: 1, padding: '12px' }}>
                                     Cancel
                                 </button>
                             </div>

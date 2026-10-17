@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import SidebarLayout from '../../../components/SidebarLayout';
+import ModalPortal from '../../../components/ModalPortal';
 import { apiRequest } from '../../../utils/api';
 import { 
     Folder, 
@@ -17,7 +18,9 @@ import {
     Award,
     ShieldCheck,
     Lock,
-    EyeOff
+    EyeOff,
+    Edit2,
+    X
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -50,6 +53,16 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
     const [materialTitle, setMaterialTitle] = useState('');
     const [materialType, setMaterialType] = useState<'video' | 'pdf' | 'notes' | 'link'>('video');
     const [materialUrl, setMaterialUrl] = useState('');
+
+    // Edit Section state
+    const [editingSection, setEditingSection] = useState<any>(null);
+    const [editSectionTitle, setEditSectionTitle] = useState('');
+
+    // Edit Material state
+    const [editingMaterial, setEditingMaterial] = useState<any>(null);
+    const [editMaterialTitle, setEditMaterialTitle] = useState('');
+    const [editMaterialType, setEditMaterialType] = useState<'video' | 'pdf' | 'notes' | 'link'>('video');
+    const [editMaterialUrl, setEditMaterialUrl] = useState('');
 
     // Dynamic DRM Watermark positions
     const [watermarkPos, setWatermarkPos] = useState({ top: '25%', left: '25%' });
@@ -181,6 +194,60 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
         }
     };
 
+    const openEditSection = (sec: any) => {
+        setEditingSection(sec);
+        setEditSectionTitle(sec.title);
+    };
+
+    const handleUpdateSection = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await apiRequest(`/api/lms/courses/sections/${editingSection.id}`, {
+                method: 'PUT',
+                body: JSON.stringify({ title: editSectionTitle })
+            });
+            setEditingSection(null);
+            fetchCourseAndSyllabus();
+        } catch (err: any) {
+            alert(err.message || 'Failed to update section.');
+        }
+    };
+
+    const handleDeleteSection = async (sectionId: string, title: string) => {
+        if (!confirm(`Are you sure you want to delete chapter "${title}" and all its materials?`)) return;
+        try {
+            await apiRequest(`/api/lms/courses/sections/${sectionId}`, { method: 'DELETE' });
+            fetchCourseAndSyllabus();
+        } catch (err: any) {
+            alert(err.message || 'Failed to delete section.');
+        }
+    };
+
+    const openEditMaterial = (mat: any) => {
+        setEditingMaterial(mat);
+        setEditMaterialTitle(mat.title);
+        setEditMaterialType(mat.type);
+        setEditMaterialUrl(mat.url);
+    };
+
+    const handleUpdateMaterial = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await apiRequest(`/api/lms/courses/sections/materials/${editingMaterial.id}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    title: editMaterialTitle,
+                    type: editMaterialType,
+                    url: editMaterialUrl
+                })
+            });
+            setEditingMaterial(null);
+            fetchCourseAndSyllabus();
+        } catch (err: any) {
+            alert(err.message || 'Failed to update content.');
+        }
+    };
+
     const getMaterialIcon = (type: string) => {
         switch (type) {
             case 'video': return <Video size={16} />;
@@ -265,16 +332,30 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
                                             {section.title}
                                         </span>
                                     </div>
-                                    {userRole === 'admin' && (
-                                        <button 
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setActiveSectionForMaterial(section.id);
-                                            }}
-                                            style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', display: 'flex' }}
-                                        >
-                                            <Plus size={14} />
-                                        </button>
+                                    {(userRole === 'admin' || userRole === 'teacher') && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
+                                            <button 
+                                                onClick={() => openEditSection(section)}
+                                                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '3px' }}
+                                                title="Rename Chapter"
+                                            >
+                                                <Edit2 size={13} />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteSection(section.id, section.title)}
+                                                style={{ background: 'none', border: 'none', color: 'rgba(239, 68, 68, 0.7)', cursor: 'pointer', padding: '3px' }}
+                                                title="Delete Chapter"
+                                            >
+                                                <Trash size={13} />
+                                            </button>
+                                            <button 
+                                                onClick={() => setActiveSectionForMaterial(section.id)}
+                                                style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', display: 'flex', padding: '3px' }}
+                                                title="Add Material"
+                                            >
+                                                <Plus size={15} />
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
 
@@ -301,13 +382,23 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
                                                     {getMaterialIcon(mat.type)}
                                                     <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{mat.title}</span>
                                                 </div>
-                                                {userRole === 'admin' && (
-                                                    <button 
-                                                        onClick={(e) => handleDeleteMaterial(mat.id, e)}
-                                                        style={{ background: 'none', border: 'none', color: 'rgba(239, 68, 68, 0.6)', cursor: 'pointer' }}
-                                                    >
-                                                        <Trash size={12} />
-                                                    </button>
+                                                {(userRole === 'admin' || userRole === 'teacher') && (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
+                                                        <button 
+                                                            onClick={() => openEditMaterial(mat)}
+                                                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+                                                            title="Edit Material"
+                                                        >
+                                                            <Edit2 size={12} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={(e) => handleDeleteMaterial(mat.id, e)}
+                                                            style={{ background: 'none', border: 'none', color: 'rgba(239, 68, 68, 0.6)', cursor: 'pointer', padding: '2px' }}
+                                                            title="Delete Material"
+                                                        >
+                                                            <Trash size={12} />
+                                                        </button>
+                                                    </div>
                                                 )}
                                             </div>
                                         ))}
@@ -317,7 +408,7 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
                         ))}
                     </div>
 
-                    {userRole === 'admin' && (
+                    {(userRole === 'admin' || userRole === 'teacher') && (
                         <button 
                             onClick={() => setIsCreatingSection(true)}
                             className="btn-secondary" 
@@ -577,6 +668,92 @@ export default function CourseDetailPage({ params }: CourseDetailPageProps) {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* Edit Section Modal */}
+            {editingSection && (
+                <ModalPortal onClose={() => setEditingSection(null)}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Rename Chapter</h3>
+                            <button style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => setEditingSection(null)}>
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleUpdateSection} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Chapter Title</label>
+                                <input 
+                                    type="text" 
+                                    className="glass-input" 
+                                    required 
+                                    value={editSectionTitle}
+                                    onChange={(e) => setEditSectionTitle(e.target.value)}
+                                    placeholder="Chapter Title"
+                                />
+                            </div>
+                            <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '12px' }}>Save</button>
+                                <button type="button" className="btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={() => setEditingSection(null)}>Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </ModalPortal>
+            )}
+
+            {/* Edit Material Modal */}
+            {editingMaterial && (
+                <ModalPortal onClose={() => setEditingMaterial(null)}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Edit Content Item</h3>
+                            <button style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => setEditingMaterial(null)}>
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleUpdateMaterial} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Title</label>
+                                <input 
+                                    type="text" 
+                                    className="glass-input" 
+                                    required 
+                                    value={editMaterialTitle}
+                                    onChange={(e) => setEditMaterialTitle(e.target.value)}
+                                    placeholder="Title"
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Content Type</label>
+                                <select 
+                                    className="glass-input" 
+                                    value={editMaterialType} 
+                                    onChange={(e) => setEditMaterialType(e.target.value as any)}
+                                >
+                                    <option value="video">Lecture Video URL</option>
+                                    <option value="pdf">PDF File Link</option>
+                                    <option value="notes">Notes / Document Link</option>
+                                    <option value="link">External Website Link</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Resource URL</label>
+                                <input 
+                                    type="url" 
+                                    className="glass-input" 
+                                    required 
+                                    value={editMaterialUrl}
+                                    onChange={(e) => setEditMaterialUrl(e.target.value)}
+                                    placeholder="https://..."
+                                />
+                            </div>
+                            <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '12px' }}>Save Changes</button>
+                                <button type="button" className="btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={() => setEditingMaterial(null)}>Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </ModalPortal>
             )}
         </SidebarLayout>
     );
